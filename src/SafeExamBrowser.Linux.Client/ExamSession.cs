@@ -141,7 +141,10 @@ namespace SafeExamBrowser.Linux.Client
 		private async Task<ExamSessionEndReason> RunServerSessionAsync(CancellationToken cancellationToken)
 		{
 			var connection = SebServerConnection.FromSettings(settings.Server);
-			var problem = connection?.Validate() ?? "The configuration does not define a SEB Server URL (sebServerURL)!";
+
+			var problem = connection == default
+				? "The configuration does not define a SEB Server URL (sebServerURL)!"
+				: connection.Validate();
 
 			if (problem != default)
 			{

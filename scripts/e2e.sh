@@ -16,15 +16,31 @@
 #   and is terminated by a SEB_QUIT instruction.
 #
 set -euo pipefail
+# The app signature key verifies the default build identifier.
+unset SEB_LINUX_BEK_SIGNATURE
 
+# The system browser may be too old for the required CDP features (this box has a
+# Chrome 40). Prefer an explicit SEB_CHROMIUM, otherwise a Chrome for Testing
+# installation if available.
+if [ -z "${SEB_CHROMIUM:-}" ]; then
+	for candidate in "$HOME/.chromium/chrome"/*/chrome-linux64/chrome \
+	                 "$HOME/.chromium/chrome"/*/chrome-win64/chrome.exe; do
+		[ -x "$candidate" ] && export SEB_CHROMIUM="$candidate" && break
+	done
+fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 E2E="$ROOT/tests/e2e"
 PORT="${SEB_E2E_PORT:-8765}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/exam-unlock-e2e.XXXXXX")"
 CLI="$ROOT/src/SafeExamBrowser.Linux.Cli/bin/Debug/net8.0/exam-unlock"
 
-# The app signature key verifies the default build identifier.
-unset SEB_LINUX_BEK_SIGNATURE
+# The .NET SDK may be installed in a non-standard location (e.g. ~/.dotnet).
+# The apphost finds the runtime via DOTNET_ROOT.
+DOTNET_BIN="$(command -v dotnet 2>/dev/null || true)"
+if [ -n "$DOTNET_BIN" ]; then
+	DOTNET_BIN="$(readlink -f "$DOTNET_BIN")"
+	export DOTNET_ROOT="$(cd "$(dirname "$DOTNET_BIN")" && pwd)"
+fi
 
 # Run the client with an isolated HOME so the browser profile and the
 # download directory do not touch the real user data.
@@ -111,6 +127,49 @@ if [ -r /sys/class/dmi/id/product_name ] \
 	echo "  (running inside a virtual machine: VM detection is disabled, the session must not be rejected)"
 fi
 
+# Headless Chrome blocks window.open() without a real user gesture, so the new-tab
+# part of the test needs a CDP-level mouse click from a parallel driver (node).
+if command -v node > /dev/null 2>&1; then
+	NO_TAB_TEST=false
+else
+	NO_TAB_TEST=true
+	echo "  (node not available: the new-tab test will be skipped)"
+fi
+
+start_scenario() {
+	# start_scenario <log-file> <configuration-file>
+	set +e
+	SEB_HEADLESS=1 HOME="$E2E_HOME" timeout 90 "$CLI" run "$2" --debug > "$1" 2>&1 &
+	CLIENT_PID=$!
+
+	# The browser profile directory is logged once the browser has been launched.
+	PROFILE_DIR=""
+
+	for _ in $(seq 1 150); do
+		PROFILE_DIR="$(grep -o "with profile '[^']*'" "$1" 2>/dev/null | head -1 | sed "s/with profile '//; s/'$//")"
+		[ -n "$PROFILE_DIR" ] && break
+		sleep 0.2
+	done
+
+	if [ "$NO_TAB_TEST" = false ] && [ -n "$PROFILE_DIR" ]; then
+		node "$E2E/tab-click.js" "$PROFILE_DIR" "http://127.0.0.1:$PORT" > "$WORK/tab-click.log" 2>&1 &
+		CLICK_PID=$!
+	fi
+}
+
+wait_scenario() {
+	set +e
+	wait "$CLIENT_PID"
+	STATUS=$?
+
+	if [ -n "${CLICK_PID:-}" ]; then
+		wait "$CLICK_PID" 2>/dev/null
+		CLICK_PID=""
+	fi
+
+	set -e
+}
+
 echo "== starting the mock server on port $PORT =="
 python3 "$E2E/server.py" --port "$PORT" --exam-config "$E2E/exam-config.seb" > "$WORK/server.log" 2>&1 &
 SERVER_PID=$!
@@ -143,10 +202,10 @@ echo "  exam-config.seb: config key $CONFIG_KEY_EXAM"
 
 echo "== scenario 1: normal configuration =="
 
-control POST /control/expect "$(python3 - "$PORT" "$CONFIG_KEY_NORMAL" "$BEK_NORMAL" <<'PY'
+control POST /control/expect "$(python3 - "$PORT" "$CONFIG_KEY_NORMAL" "$BEK_NORMAL" "$NO_TAB_TEST" <<'PY'
 import json, sys
 
-port, config_key, browser_exam_key = sys.argv[1], sys.argv[2], sys.argv[3]
+port, config_key, browser_exam_key, no_tab_test = sys.argv[1:5]
 print(json.dumps({
     "scenario": "normal",
     "mode": "page",
@@ -154,14 +213,13 @@ print(json.dumps({
     "configKey": config_key,
     "browserExamKey": browser_exam_key,
     "pageQuit": True,
+    "noTabTest": no_tab_test == "true",
 }))
 PY
 )" > /dev/null
 
-set +e
-SEB_HEADLESS=1 HOME="$E2E_HOME" timeout 90 "$CLI" run "$E2E/normal.seb" --debug > "$WORK/normal.log" 2>&1
-STATUS=$?
-set -e
+start_scenario "$WORK/normal.log" "$E2E/normal.seb"
+wait_scenario
 
 [ "$STATUS" -eq 0 ] || fail "scenario 1: the client exited with status $STATUS (see $WORK/normal.log)"
 
@@ -186,10 +244,10 @@ run_summary "$WORK/summary-normal.json" normal || fail "scenario 1: server-side 
 
 echo "== scenario 2: SEB Server session =="
 
-control POST /control/expect "$(python3 - "$PORT" "$CONFIG_KEY_EXAM" <<'PY'
+control POST /control/expect "$(python3 - "$PORT" "$CONFIG_KEY_EXAM" "$NO_TAB_TEST" <<'PY'
 import json, sys
 
-port, config_key = sys.argv[1], sys.argv[2]
+port, config_key, no_tab_test = sys.argv[1:4]
 print(json.dumps({
     "scenario": "server",
     "mode": "server",
@@ -197,14 +255,13 @@ print(json.dumps({
     "configKey": config_key,
     "browserExamKey": "e2e-server-bek",
     "pageQuit": False,
+    "noTabTest": no_tab_test == "true",
 }))
 PY
 )" > /dev/null
 
-set +e
-SEB_HEADLESS=1 HOME="$E2E_HOME" timeout 90 "$CLI" run "$E2E/server-mode.seb" --debug > "$WORK/session.log" 2>&1
-STATUS=$?
-set -e
+start_scenario "$WORK/session.log" "$E2E/server-mode.seb"
+wait_scenario
 
 [ "$STATUS" -eq 0 ] || fail "scenario 2: the client exited with status $STATUS (see $WORK/session.log)"
 

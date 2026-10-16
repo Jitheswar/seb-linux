@@ -82,7 +82,16 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 					"or set the SEB_CHROMIUM environment variable to the browser executable.");
 			}
 
-			var profileDirectory = options.ProfileDirectory ?? Path.Combine(Path.GetTempPath(), $"seb-linux-{Guid.NewGuid():N}");
+			var majorVersion = ChromiumLocator.GetVersionMajor(ChromiumLocator.GetVersion(executable));
+
+			if (majorVersion > 0 && majorVersion < 90)
+			{
+				throw new InvalidOperationException($"The Chromium-based browser '{executable}' (version {majorVersion}) is too old: " +
+					"exam-unlock requires Chromium 90 or newer (headless mode and CDP request interception). " +
+					"Install a current Chromium or Google Chrome, or point the SEB_CHROMIUM environment variable at one.");
+			}
+
+			var profileDirectory = options.ProfileDirectory ?? Path.Combine(Path.GetTempPath(), $"exam-unlock-{Guid.NewGuid():N}");
 			var userAgent = options.UserAgent ?? BuildUserAgent(executable, options.Settings);
 			var arguments = BuildArguments(options, profileDirectory, userAgent);
 

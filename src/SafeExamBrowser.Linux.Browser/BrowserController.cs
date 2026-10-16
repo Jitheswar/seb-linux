@@ -83,7 +83,6 @@ namespace SafeExamBrowser.Linux.Browser
 		private readonly ILogger logger;
 
 		private readonly Dictionary<string, TargetState> targets = new Dictionary<string, TargetState>();
-		private readonly HashSet<string> attachedTargets = new HashSet<string>();
 		private readonly TaskCompletionSource<bool> browserExit = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
 		private CdpConnection connection;
@@ -305,6 +304,29 @@ namespace SafeExamBrowser.Linux.Browser
 
 			await connection.SendAsync("Target.setDiscoverTargets", new { discover = true });
 
+			// All supported targets (pages, frames, workers) are attached automatically, so a new
+			// tab is intercepted as soon as it exists. If the first document request of a new tab
+			// is issued before interception is enabled for its session, the page is reloaded once,
+			// so every document is loaded through request interception (see
+			// EnsureInterceptedDocumentAsync).
+			await connection.SendAsync("Target.setAutoAttach", new
+			{
+				autoAttach = true,
+				flatten = true,
+				// Newer Chrome versions require the parameter; the wait itself is not used, as it
+				// does not reliably hold the first navigation of a window.open target.
+				waitForDebuggerOnStart = false,
+				filter = new[]
+				{
+					new { type = "page" },
+					new { type = "iframe" },
+					new { type = "webview" },
+					new { type = "worker" },
+					new { type = "shared_worker" },
+					new { type = "service_worker" }
+				}
+			});
+
 			using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
 			{
 				timeout.CancelAfter(TimeSpan.FromSeconds(30));
@@ -385,9 +407,6 @@ namespace SafeExamBrowser.Linux.Browser
 		{
 			switch (@event.Method)
 			{
-				case "Target.targetCreated":
-					await HandleTargetCreatedAsync(@event);
-					break;
 				case "Target.attachedToTarget":
 					await HandleAttachedToTargetAsync(@event);
 					break;
@@ -412,32 +431,6 @@ namespace SafeExamBrowser.Linux.Browser
 			}
 		}
 
-		private async Task HandleTargetCreatedAsync(CdpEvent @event)
-		{
-			var targetInfo = @event.Parameters.GetProperty("targetInfo");
-			var type = targetInfo.GetProperty("type").GetString();
-			var targetId = targetInfo.GetProperty("targetId").GetString();
-
-			if (type != "page" || attachedTargets.Contains(targetId))
-			{
-				return;
-			}
-
-			attachedTargets.Add(targetId);
-
-			logger.Debug($"Attaching to new page target {targetId}.");
-
-			var result = await connection.SendAsync("Target.attachToTarget", new { targetId, flatten = true });
-			var sessionId = result.GetProperty("sessionId").GetString();
-
-			await InitializeSessionAsync(new TargetState
-			{
-				SessionId = sessionId,
-				TargetId = targetId,
-				Type = type
-			});
-		}
-
 		private async Task HandleAttachedToTargetAsync(CdpEvent @event)
 		{
 			var sessionId = @event.Parameters.GetProperty("sessionId").GetString();
@@ -459,7 +452,6 @@ namespace SafeExamBrowser.Linux.Browser
 			if (targets.TryGetValue(sessionId, out var state))
 			{
 				targets.Remove(sessionId);
-				attachedTargets.Remove(state.TargetId);
 
 				logger.Debug($"Target {state.TargetId} ({state.Type}) has been detached.");
 			}
@@ -489,11 +481,19 @@ namespace SafeExamBrowser.Linux.Browser
 						state.RootFrameId = frame.GetProperty("id").GetString();
 						state.PageUrl = frame.TryGetProperty("url", out var url) ? url.GetString() : default;
 					}
-
 				}
 				catch (Exception e)
 				{
 					logger.Debug($"Could not initialize page domain for target {state.TargetId}: {e.Message}");
+				}
+
+				try
+				{
+					await PrepareScriptUpdateAsync(state, state.PageUrl ?? "about:blank");
+				}
+				catch (Exception e)
+				{
+					logger.Debug($"Could not inject scripts into target {state.TargetId}: {e.Message}");
 				}
 			}
 
@@ -509,37 +509,13 @@ namespace SafeExamBrowser.Linux.Browser
 				logger.Debug($"Could not enable request interception for target {state.TargetId}: {e.Message}");
 			}
 
+			// The document of a new tab can already be loaded before request interception is
+			// enabled, and no navigation events are delivered for such a load. The frame state
+			// determined above is the deterministic signal for that case. This must run after
+			// Fetch.enable, so that the reload is intercepted.
 			if (hasPageDomain)
 			{
-				try
-				{
-					await PrepareScriptUpdateAsync(state, state.PageUrl ?? "about:blank");
-				}
-				catch (Exception e)
-				{
-					logger.Debug($"Could not inject scripts into target {state.TargetId}: {e.Message}");
-				}
-			}
-
-			try
-			{
-				await connection.SendAsync("Target.setAutoAttach", new
-				{
-					autoAttach = true,
-					flatten = true,
-					waitForDebuggerOnStart = false,
-					filter = new[]
-					{
-						new { type = "iframe" },
-						new { type = "worker" },
-						new { type = "shared_worker" },
-						new { type = "service_worker" }
-					}
-				}, state.SessionId);
-			}
-			catch (Exception e)
-			{
-				logger.Debug($"Could not enable auto-attach for target {state.TargetId}: {e.Message}");
+				EnsureInterceptedDocumentAsync(state, state.PageUrl);
 			}
 
 			if (state.Type == "page")
@@ -566,6 +542,8 @@ namespace SafeExamBrowser.Linux.Browser
 				state.RootFrameId ??= frameId;
 				state.PageUrl = url;
 
+				EnsureInterceptedDocumentAsync(state, url);
+
 				if (state.Type == "page" && state == startPage)
 				{
 					logger.Debug($"Main frame navigated to '{url}'.");
@@ -578,6 +556,31 @@ namespace SafeExamBrowser.Linux.Browser
 					}
 				}
 			}
+		}
+
+		/// <summary>
+		/// The first document request of a new tab can be issued before request interception is
+		/// enabled for its session. Such a document is loaded without the Safe Exam Browser headers
+		/// and scripts, so the page is reloaded once. The reload is guaranteed to pass through
+		/// interception, because it is enabled before the navigation event is processed.
+		/// </summary>
+		private void EnsureInterceptedDocumentAsync(TargetState state, string url)
+		{
+			if (state.Type != "page" || state.DocumentIntercepted || state.ReloadedOnce)
+			{
+				return;
+			}
+
+			if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+			{
+				return;
+			}
+
+			state.ReloadedOnce = true;
+
+			logger.Debug($"The document of target {state.TargetId} was loaded without interception, reloading it.");
+
+			connection.Post("Page.reload", sessionId: state.SessionId);
 		}
 
 		private void HandleDownloadWillBegin(CdpEvent @event)
@@ -683,6 +686,8 @@ namespace SafeExamBrowser.Linux.Browser
 
 			if (isDocument && target != default)
 			{
+				target.DocumentIntercepted = true;
+
 				try
 				{
 					// Note: the script must be prepared before the request is continued, but the
@@ -924,6 +929,8 @@ namespace SafeExamBrowser.Linux.Browser
 			public string PageUrl { get; set; }
 			public List<string> ScriptIdentifiers { get; } = new List<string>();
 			public string LastScript { get; set; }
+			public bool DocumentIntercepted { get; set; }
+			public bool ReloadedOnce { get; set; }
 		}
 
 		private sealed class DownloadInfo

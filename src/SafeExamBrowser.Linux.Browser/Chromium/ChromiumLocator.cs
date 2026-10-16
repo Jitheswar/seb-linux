@@ -9,8 +9,10 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 
@@ -48,7 +50,9 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 		};
 
 		/// <summary>
-		/// Finds the Chromium executable, honoring the SEB_CHROMIUM environment variable. Returns null if no executable is available.
+		/// Finds the Chromium executable, honoring the SEB_CHROMIUM environment variable. If multiple
+		/// browsers are found, the newest one is preferred, because the DevTools features required for
+		/// the exam key injection are only available in recent versions. Returns null if no executable is available.
 		/// </summary>
 		internal static string Find()
 		{
@@ -64,29 +68,28 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 				Console.Error.WriteLine($"WARN  | Browser | The configured Chromium executable '{configured}' does not exist.");
 			}
 
+			var candidates = new List<string>();
+
+			void Add(string path)
+			{
+				if (path != default && File.Exists(path) && !candidates.Contains(path))
+				{
+					candidates.Add(path);
+				}
+			}
+
 			foreach (var name in EXECUTABLE_NAMES)
 			{
-				var path = FindOnPath(name);
-
-				if (path != default)
-				{
-					return path;
-				}
+				Add(FindOnPath(name));
 			}
 
 			foreach (var directory in COMMON_PATHS)
 			{
 				foreach (var name in EXECUTABLE_NAMES)
 				{
-					var path = Path.Combine(directory, name);
-
-					if (File.Exists(path))
-					{
-						return path;
-					}
+					Add(Path.Combine(directory, name));
 				}
 			}
-
 
 			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
 			{
@@ -104,17 +107,46 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 
 					foreach (var relative in WINDOWS_INSTALLATION_PATHS)
 					{
-						var path = Path.Combine(root, relative);
-
-						if (File.Exists(path))
-						{
-							return path;
-						}
+						Add(Path.Combine(root, relative));
 					}
 				}
 			}
 
-			return default;
+			AddChromeForTesting(Add);
+
+			if (candidates.Count == 0)
+			{
+				return default;
+			}
+
+			return candidates.OrderByDescending(c => GetVersionMajor(GetVersion(c))).First();
+		}
+
+		/// <summary>
+		/// Adds the browser of a "Chrome for Testing" installation (e.g. from npx @puppeteer/browsers or Playwright).
+		/// </summary>
+		private static void AddChromeForTesting(Action<string> add)
+		{
+			var baseDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".chromium", "chrome");
+			string[] versions;
+
+			try
+			{
+				versions = Directory.Exists(baseDirectory) ? Directory.GetDirectories(baseDirectory) : default;
+			}
+			catch (Exception)
+			{
+				return;
+			}
+
+			var relative = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+				? "chrome-win64\\chrome.exe"
+				: "chrome-linux64/chrome";
+
+			foreach (var version in versions ?? Array.Empty<string>())
+			{
+				add(Path.Combine(version, relative));
+			}
 		}
 
 		/// <summary>
@@ -151,6 +183,19 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 			}
 
 			return default;
+		}
+
+		/// <summary>
+		/// Determines the major version number (e.g. 120 for "120.0.6099.71") of the given version string, or 0 if it cannot be determined.
+		/// </summary>
+		internal static int GetVersionMajor(string version)
+		{
+			if (!string.IsNullOrWhiteSpace(version) && int.TryParse(version.Split('.')[0], out var major))
+			{
+				return major;
+			}
+
+			return 0;
 		}
 
 		private static string FindOnPath(string name)

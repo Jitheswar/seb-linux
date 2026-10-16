@@ -39,11 +39,11 @@ NOTIFICATION_ID = 7
 
 PAGE = """<!DOCTYPE html>
 <html><head><title>SEB E2E</title></head>
-<body><h1>SEB end-to-end test</h1>
+<body><h1>SEB end-to-end test</h1><a id="e2e-tab" href="/tab-page" target="_blank">open tab</a>
 <script>
 (async () => {
   const out = { url: location.href, ua: navigator.userAgent };
-  let page = { quit: false };
+  let page = { quit: false, waitTab: false };
   try { page = await (await fetch('/page-config', { cache: 'no-store' })).json(); } catch (e) {}
   try {
     out.seb = typeof window.SafeExamBrowser;
@@ -56,13 +56,12 @@ PAGE = """<!DOCTYPE html>
     const r = await fetch('/subresource', { cache: 'no-store' });
     out.subresource = r.status;
   } catch (e) { out.subresourceError = String(e); }
-  try {
-    out.openedTab = !!window.open('/tab-page', '_blank');
-  } catch (e) { out.openedTabError = String(e); }
   out.tabReported = false;
-  for (let i = 0; i < 60 && !out.tabReported; i++) {
-    try { out.tabReported = (await (await fetch('/tab-status', { cache: 'no-store' })).json()).reported; } catch (e) {}
-    if (!out.tabReported) { await new Promise(r => setTimeout(r, 100)); }
+  if (page.waitTab) {
+    for (let i = 0; i < 60 && !out.tabReported; i++) {
+      try { out.tabReported = (await (await fetch('/tab-status', { cache: 'no-store' })).json()).reported; } catch (e) {}
+      if (!out.tabReported) { await new Promise(r => setTimeout(r, 100)); }
+    }
   }
   try {
     const a = document.createElement('a');
@@ -219,8 +218,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/page-config":
             self._check_page_headers("/page-config")
             with STATE.lock:
-                quit_page = bool(STATE.expect and STATE.expect.get("pageQuit"))
-            self._respond_json({"quit": quit_page})
+                expect = STATE.expect or {}
+            self._respond_json({"quit": bool(expect.get("pageQuit")), "waitTab": not expect.get("noTabTest")})
         elif path == "/subresource":
             self._check_page_headers("/subresource")
             self._respond(200, "subresource-ok", "text/plain")
@@ -439,16 +438,18 @@ class Handler(BaseHTTPRequestHandler):
                 check("the configuration key hash (JavaScript API) matches", page.get("configKey") == sha256_hex(expect["url"] + expect["configKey"]), page.get("configKey"))
                 check("the browser exam key hash (JavaScript API) matches", page.get("browserExamKey") == sha256_hex(expect["url"] + expect["browserExamKey"]), page.get("browserExamKey"))
                 check("subresources are loaded", page.get("subresource") == 200, page.get("subresource"))
-                check("the exam page opened a new tab", page.get("openedTab") is True, page.get("openedTabError", ""))
-                check("the new tab loaded and reported back", page.get("tabReported") is True and STATE.tab_report is not None, page.get("tabReported"))
+                if not expect.get("noTabTest"):
+                    check("the new tab was opened and reported back", page.get("tabReported") is True and STATE.tab_report is not None, page.get("tabReported"))
                 check("the download was triggered", page.get("downloadTriggered") is True, page.get("downloadError", ""))
 
-                tab = STATE.tab_report
-                if tab:
-                    check("the user agent identifies as SEB in the new tab", "SEB" in tab.get("ua", ""), tab.get("ua", ""))
-                    check("the SEB JavaScript API is available in the new tab", tab.get("seb") == "object" and tab.get("hasUpdateKeys") == "function", tab.get("version"))
-                    check("the configuration key hash (new tab) matches", tab.get("configKey") == sha256_hex(expect["url"] + "tab-page" + expect["configKey"]), tab.get("configKey"))
-                    check("the browser exam key hash (new tab) matches", tab.get("browserExamKey") == sha256_hex(expect["url"] + "tab-page" + expect["browserExamKey"]), tab.get("browserExamKey"))
+                if not expect.get("noTabTest"):
+                    tab = STATE.tab_report
+
+                    if tab:
+                        check("the user agent identifies as SEB in the new tab", "SEB" in tab.get("ua", ""), tab.get("ua", ""))
+                        check("the SEB JavaScript API is available in the new tab", tab.get("seb") == "object" and tab.get("hasUpdateKeys") == "function", tab.get("version"))
+                        check("the configuration key hash (new tab) matches", tab.get("configKey") == sha256_hex(expect["url"] + "tab-page" + expect["configKey"]), tab.get("configKey"))
+                        check("the browser exam key hash (new tab) matches", tab.get("browserExamKey") == sha256_hex(expect["url"] + "tab-page" + expect["browserExamKey"]), tab.get("browserExamKey"))
         elif mode == "server":
             handshake = STATE.handshake_post or {}
 
@@ -473,20 +474,30 @@ class Handler(BaseHTTPRequestHandler):
                 check("the configuration key hash (JavaScript API) matches", page.get("configKey") == sha256_hex(expect["url"] + expect["configKey"]), page.get("configKey"))
                 check("the server browser exam key hash (JavaScript API) matches", page.get("browserExamKey") == sha256_hex(expect["url"] + expect["browserExamKey"]), page.get("browserExamKey"))
 
-                check("the exam page opened a new tab", page.get("openedTab") is True, page.get("openedTabError", ""))
-                check("the new tab loaded and reported back", page.get("tabReported") is True and STATE.tab_report is not None, page.get("tabReported"))
+                if not expect.get("noTabTest"):
+                    check("the new tab was opened and reported back", page.get("tabReported") is True and STATE.tab_report is not None, page.get("tabReported"))
 
-                tab = STATE.tab_report
-                if tab:
-                    check("the user agent identifies as SEB in the new tab", "SEB" in tab.get("ua", ""), tab.get("ua", ""))
-                    check("the SEB JavaScript API is available in the new tab", tab.get("seb") == "object" and tab.get("hasUpdateKeys") == "function", tab.get("version"))
-                    check("the configuration key hash (new tab) matches", tab.get("configKey") == sha256_hex(expect["url"] + "tab-page" + expect["configKey"]), tab.get("configKey"))
-                    check("the browser exam key hash (new tab) matches", tab.get("browserExamKey") == sha256_hex(expect["url"] + "tab-page" + expect["browserExamKey"]), tab.get("browserExamKey"))
+                if not expect.get("noTabTest"):
+                    tab = STATE.tab_report
+
+                    if tab:
+                        check("the user agent identifies as SEB in the new tab", "SEB" in tab.get("ua", ""), tab.get("ua", ""))
+                        check("the SEB JavaScript API is available in the new tab", tab.get("seb") == "object" and tab.get("hasUpdateKeys") == "function", tab.get("version"))
+                        check("the configuration key hash (new tab) matches", tab.get("configKey") == sha256_hex(expect["url"] + "tab-page" + expect["configKey"]), tab.get("configKey"))
+                        check("the browser exam key hash (new tab) matches", tab.get("browserExamKey") == sha256_hex(expect["url"] + "tab-page" + expect["browserExamKey"]), tab.get("browserExamKey"))
 
             check("the connection was closed (DELETE)", STATE.deleted)
 
+        # The first document load of a new tab can precede request interception and is reloaded
+        # by the client, so the final load (and its headers) is what is verified per path.
+        last_header_checks = {}
+
         for header_check in STATE.header_checks:
-            check(f"the SEB request headers for '{header_check['path']}' match", header_check["ok"], f"configKeyHash={header_check['configKeyHash']} requestHash={header_check['requestHash']}")
+            last_header_checks[header_check["path"]] = header_check
+
+        for path in sorted(last_header_checks):
+            header_check = last_header_checks[path]
+            check(f"the SEB request headers for '{path}' match", header_check["ok"], f"configKeyHash={header_check['configKeyHash']} requestHash={header_check['requestHash']}")
 
         return {
             "scenario": expect.get("scenario"),

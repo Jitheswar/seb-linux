@@ -132,17 +132,19 @@ namespace SafeExamBrowser.Linux.Cli
 
 			using (var cancellation = new CancellationTokenSource())
 			{
-				Console.CancelKeyPress += (sender, eventArgs) =>
+				Console.CancelKeyPress += (_, args) =>
 				{
-					eventArgs.Cancel = true;
+					args.Cancel = true;
+					logger.Info("Termination requested.");
+
 					cancellation.Cancel();
 				};
-
 				var session = new ExamSession(result.Settings, new ExamSessionOptions
 				{
 					ChromiumExecutablePath = options.Chromium,
 					Logger = logger,
-					QuitPasswordPrompt = () => Prompt("Quit password: ")
+					QuitPasswordPrompt = () => Prompt("Quit password: "),
+					ConfigurationPassword = options.Password
 				});
 
 				var reason = await session.RunAsync(cancellation.Token);

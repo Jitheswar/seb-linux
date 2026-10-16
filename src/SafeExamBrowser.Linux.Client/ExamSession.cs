@@ -64,6 +64,12 @@ namespace SafeExamBrowser.Linux.Client
 		/// Returns the entered password, or null if the request has been aborted.
 		/// </summary>
 		public Func<string> QuitPasswordPrompt { get; set; }
+
+		/// <summary>
+		/// The password for encrypted configurations, used when a new configuration is
+		/// downloaded during the session, or null if the configuration is not encrypted.
+		/// </summary>
+		public string ConfigurationPassword { get; set; }
 	}
 
 	/// <summary>
@@ -443,6 +449,8 @@ namespace SafeExamBrowser.Linux.Client
 
 			controller.DownloadCompleted += (url, fileName, filePath) => logger.Info($"Download completed: '{fileName}' -> '{filePath}'.");
 
+			controller.ConfigurationDownloadRequested += url => _ = HandleConfigurationDownloadAsync(url, resetRequested);
+
 			_ = controller.WaitForExitAsync().ContinueWith(task => browserExited.TrySetResult(true), TaskContinuationOptions.OnlyOnRanToCompletion);
 
 			return controller;
@@ -465,6 +473,45 @@ namespace SafeExamBrowser.Linux.Client
 			logger.Warn("Termination has been denied: the entered quit password is not correct.");
 
 			return false;
+		}
+
+		/// <summary>
+		/// Downloads the SEB configuration the user navigated to (allowed by
+		/// allowConfigurationDownloads), validates it, applies it and resets the session
+		/// so the browser restarts with the new configuration.
+		/// </summary>
+		private async Task HandleConfigurationDownloadAsync(string url, TaskCompletionSource<bool> resetRequested)
+		{
+			logger.Info($"Configuration download requested for '{url}'.");
+
+			try
+			{
+				var result = await Task.Run(() => new ConfigurationLoader(logger).Load(url, options.ConfigurationPassword));
+
+				if (result.Status != LoadStatus.Success)
+				{
+					logger.Warn($"Failed to load the requested configuration from '{url}' -> {result.Status}.");
+					return;
+				}
+
+				var problem = ExamSession.Validate(result.Settings);
+
+				if (problem != default)
+				{
+					logger.Warn($"The requested configuration from '{url}' is invalid: {problem}.");
+					return;
+				}
+
+				settings = result.Settings;
+
+				logger.Info("The new configuration has been applied, the session is being reset.");
+
+				resetRequested.TrySetResult(true);
+			}
+			catch (Exception e)
+			{
+				logger.Warn($"Failed to download the configuration from '{url}': {e.Message}");
+			}
 		}
 	}
 }

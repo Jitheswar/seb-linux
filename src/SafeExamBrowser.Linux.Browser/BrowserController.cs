@@ -91,6 +91,7 @@ namespace SafeExamBrowser.Linux.Browser
 		private readonly RequestFilter requestFilter = new RequestFilter();
 		private readonly Dictionary<string, TargetState> targets = new Dictionary<string, TargetState>();
 		private readonly HashSet<string> attachedTargets = new HashSet<string>();
+		private readonly TaskCompletionSource<bool> browserExit = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
 		private CdpConnection connection;
 		private BrowserLauncher launcher;
@@ -183,6 +184,8 @@ namespace SafeExamBrowser.Linux.Browser
 				Settings = settings
 			}, cancellationToken);
 
+			MonitorBrowserExit();
+
 			profileDirectory = result.ProfileDirectory;
 			UserAgent = result.UserAgent;
 
@@ -207,11 +210,29 @@ namespace SafeExamBrowser.Linux.Browser
 		}
 
 		/// <summary>
-		/// Waits until the browser process has exited.
+		/// Waits until the browser process has exited. When the browser has not been launched at all,
+		/// the wait completes once the controller has been disposed.
 		/// </summary>
 		public Task WaitForExitAsync(CancellationToken cancellationToken = default)
 		{
-			return launcher?.WaitForExitAsync(cancellationToken) ?? Task.CompletedTask;
+			return browserExit.Task.WaitAsync(cancellationToken);
+		}
+
+		private void MonitorBrowserExit()
+		{
+			_ = Task.Run(async () =>
+			{
+				try
+				{
+					await launcher.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+				}
+				catch (Exception)
+				{
+					// The wait can fail when the launcher is disposed during shutdown, then the browser has exited anyway.
+				}
+
+				browserExit.TrySetResult(true);
+			});
 		}
 
 		/// <summary>
@@ -264,6 +285,8 @@ namespace SafeExamBrowser.Linux.Browser
 
 					launcher.Dispose();
 				}
+
+				browserExit.TrySetResult(true);
 			}
 			catch (Exception e)
 			{

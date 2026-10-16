@@ -30,7 +30,7 @@ namespace SafeExamBrowser.Linux.Tests
 		}
 
 		[Fact]
-		public void MustRejectServerSessionMode()
+		public void MustRejectServerSessionModeWithoutServerUrl()
 		{
 			var settings = new AppSettings();
 
@@ -38,6 +38,29 @@ namespace SafeExamBrowser.Linux.Tests
 			settings.ConfigurationFile.SessionMode = SessionMode.Server;
 
 			Assert.Contains("SEB Server", ExamSession.Validate(settings));
+		}
+
+		[Fact]
+		public void MustRejectServerSessionModeWithInvalidServerUrl()
+		{
+			var settings = new AppSettings();
+
+			settings.ConfigurationFile.SessionMode = SessionMode.Server;
+			settings.Server.ServerUrl = "not a url";
+
+			Assert.Contains("URL", ExamSession.Validate(settings));
+		}
+
+		[Fact]
+		public void MustAcceptServerSessionModeWithServerUrl()
+		{
+			// The start URL is provided by the configuration downloaded from the server.
+			var settings = new AppSettings();
+
+			settings.ConfigurationFile.SessionMode = SessionMode.Server;
+			settings.Server.ServerUrl = "https://seb-server.example.org";
+
+			Assert.Null(ExamSession.Validate(settings));
 		}
 
 		[Fact]

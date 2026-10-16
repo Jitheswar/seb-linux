@@ -68,6 +68,24 @@ namespace SafeExamBrowser.Linux.Client
 		}
 
 		/// <summary>
+		/// Loads the configuration from the given data, e.g. an exam configuration downloaded
+		/// from a SEB Server instance. The source is only used for logging and display.
+		/// </summary>
+		public ConfigurationLoadResult LoadData(byte[] data, string source = null, string password = null)
+		{
+			var resource = source == default ? new Uri("urn:seb:server-configuration") : ToResource(source);
+			var repository = new ConfigurationRepository(logger);
+			var status = repository.TryLoadSettings(new MemoryStream(data), out var settings, PasswordParameters(password));
+
+			if (status != LoadStatus.Success)
+			{
+				logger.Error($"Failed to load the configuration data from '{resource}' -> {status}.");
+			}
+
+			return new ConfigurationLoadResult { Settings = settings, Source = resource, Status = status };
+		}
+
+		/// <summary>
 		/// Calculates the config key of the given file, URL or data URI without fully loading it
 		/// into settings (see https://safeexambrowser.org/developer/seb-config-key.html).
 		/// </summary>

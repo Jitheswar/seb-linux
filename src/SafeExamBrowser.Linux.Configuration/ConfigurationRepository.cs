@@ -90,18 +90,7 @@ namespace SafeExamBrowser.Linux.Configuration
 				{
 					if (status == LoadStatus.Success)
 					{
-						status = TryParseData(stream, out _, out _, out var data, password);
-
-						if (status == LoadStatus.Success)
-						{
-							status = dataValidator.Validate(data) ? LoadStatus.Success : LoadStatus.InvalidData;
-						}
-
-						if (status == LoadStatus.Success)
-						{
-							dataMapper.Map(data, settings);
-							dataProcessor.Process(data, settings);
-						}
+						status = ParseSettings(stream, settings, password);
 					}
 				}
 			}
@@ -109,6 +98,48 @@ namespace SafeExamBrowser.Linux.Configuration
 			{
 				status = LoadStatus.UnexpectedError;
 				logger.Error($"Unexpected error while trying to load '{resource}'!", e);
+			}
+
+			return status;
+		}
+
+		/// <summary>
+		/// Loads the settings from already available configuration data, e.g. an exam
+		/// configuration downloaded from a SEB Server instance.
+		/// </summary>
+		public LoadStatus TryLoadSettings(Stream data, out AppSettings settings, PasswordParameters password = null)
+		{
+			var status = default(LoadStatus);
+
+			settings = LoadDefaultSettings();
+			dataProcessor.ProcessDefault(settings);
+
+			try
+			{
+				status = ParseSettings(data, settings, password);
+			}
+			catch (Exception e)
+			{
+				status = LoadStatus.UnexpectedError;
+				logger.Error("Unexpected error while parsing the configuration data!", e);
+			}
+
+			return status;
+		}
+
+		private LoadStatus ParseSettings(Stream data, AppSettings settings, PasswordParameters password)
+		{
+			var status = TryParseData(data, out _, out _, out var rawData, password);
+
+			if (status == LoadStatus.Success)
+			{
+				status = dataValidator.Validate(rawData) ? LoadStatus.Success : LoadStatus.InvalidData;
+			}
+
+			if (status == LoadStatus.Success)
+			{
+				dataMapper.Map(rawData, settings);
+				dataProcessor.Process(rawData, settings);
 			}
 
 			return status;

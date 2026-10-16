@@ -121,6 +121,11 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 				WorkingDirectory = Path.GetTempPath()
 			};
 
+			// A stale D-Bus socket can outlive its bus daemon. When Chrome consults such a bus,
+			// every network request hangs (the bus call never completes), which makes pages fail
+			// to load. The exam browser has no use for D-Bus, so it must not depend on it.
+			startInfo.Environment.Remove("DBUS_SESSION_BUS_ADDRESS");
+			startInfo.Environment.Remove("DBUS_SYSTEM_BUS_ADDRESS");
 			foreach (var argument in arguments)
 			{
 				startInfo.ArgumentList.Add(argument);
@@ -255,6 +260,12 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 				"--disable-extensions",
 				"--disable-component-update",
 				"--disable-background-networking",
+
+				// Keep the exam page at full speed (timers, rendering) even when the window is
+				// not in focus or is covered by another window.
+				"--disable-background-timer-throttling",
+				"--disable-backgrounding-occluded-windows",
+				"--disable-renderer-backgrounding",
 
 				$"--user-agent={userAgent}"
 			};

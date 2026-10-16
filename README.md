@@ -102,6 +102,15 @@ The configuration may be a file path, an `http(s)` URL or a `data:` URI.
 The `keys` command prints the values an exam administrator needs for the
 configuration of their LMS.
 
+### Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Success (including a normal session end via the quit URL) |
+| 1 | Usage error (unknown command or invalid option) |
+| 2 | Configuration error (missing/invalid configuration, failed validation) |
+| 3 | Runtime error (browser process died unexpectedly, session failure) |
+
 ## How exams are verified
 
 While an exam configuration is active, the browser behaves like SEB on
@@ -150,10 +159,10 @@ Curious implementation details:
 - The request interception pipeline still rewrites `seb://`/`sebs://` URLs,
   handles the quit URL and detects configuration downloads, but it never
   blocks a request: everything is continued (with the SEB headers appended).
-- Because the renderer is paused while a document request is intercepted, the
-  SEB JavaScript API layer for the next document is registered *before* the
-  request is continued, using fire-and-forget DevTools commands to avoid a
-  deadlock (the renderer does not answer while paused).
+- The per-document JavaScript layer is registered with fire-and-forget
+  DevTools commands: while a new page target is held by
+  `waitForDebuggerOnStart`, renderer session commands do not respond, and
+  awaiting them deadlocks the interception pipeline.
 - New tabs and windows are attached automatically, so the SEB JavaScript API
   and the per-URL key hashes are available there as well. Chrome is asked to
   hold the first document of every new page target (`waitForDebuggerOnStart`)

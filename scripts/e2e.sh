@@ -32,7 +32,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 E2E="$ROOT/tests/e2e"
 PORT="${SEB_E2E_PORT:-8765}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/exam-unlock-e2e.XXXXXX")"
-CLI="$ROOT/src/SafeExamBrowser.Linux.Cli/bin/Debug/net8.0/exam-unlock"
+CLI="${SEB_E2E_CLI:-$ROOT/src/SafeExamBrowser.Linux.Cli/bin/Debug/net8.0/exam-unlock}"
 
 # The .NET SDK may be installed in a non-standard location (e.g. ~/.dotnet).
 # The apphost finds the runtime via DOTNET_ROOT.

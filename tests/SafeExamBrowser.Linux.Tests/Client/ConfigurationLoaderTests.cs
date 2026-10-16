@@ -44,6 +44,49 @@ namespace SafeExamBrowser.Linux.Tests
 		}
 
 		[Fact]
+		public void MustLoadConfigurationFromBase64DataUri()
+		{
+			var path = Path.Combine(TestData, "seb/unencrypted_mac_001.seb");
+			var data = Convert.ToBase64String(File.ReadAllBytes(path));
+			var result = new ConfigurationLoader(logger).Load($"data:application/octet-stream;base64,{data}");
+
+			Assert.Equal(LoadStatus.Success, result.Status);
+			Assert.Equal(ExpectedConfigurationKey, result.Settings.Browser.ConfigurationKey);
+		}
+
+		[Fact]
+		public void MustLoadConfigurationFromPlainDataUri()
+		{
+			var xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+				"<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n" +
+				"<plist version=\"1.0\"><dict>" +
+				"<key>originatorVersion</key><string>T</string>" +
+				"<key>startURL</key><string>http://example.org/exam</string>" +
+				"</dict></plist>";
+
+			var result = new ConfigurationLoader(logger).Load($"data:application/octet-stream,{Uri.EscapeDataString(xml)}");
+
+			Assert.Equal(LoadStatus.Success, result.Status);
+			Assert.Equal("http://example.org/exam", result.Settings.Browser.StartUrl);
+		}
+
+		[Fact]
+		public void MustReportInvalidDataForMalformedBase64DataUri()
+		{
+			var result = new ConfigurationLoader(logger).Load("data:application/octet-stream;base64,!!!not-base64!!!");
+
+			Assert.Equal(LoadStatus.InvalidData, result.Status);
+		}
+
+		[Fact]
+		public void MustReportInvalidDataForDataUriWithoutDataPart()
+		{
+			var result = new ConfigurationLoader(logger).Load("data:application/octet-stream");
+
+			Assert.Equal(LoadStatus.InvalidData, result.Status);
+		}
+
+		[Fact]
 		public void MustCalculateConfigurationKeyWithoutLoadingSettings()
 		{
 			var key = new ConfigurationLoader(logger).CalculateConfigurationKey(Path.Combine(TestData, "seb/unencrypted_mac_001.seb"));

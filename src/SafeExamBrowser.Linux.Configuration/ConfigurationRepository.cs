@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
+using System.Text;
 using SafeExamBrowser.Linux.Configuration.ConfigurationData;
 using SafeExamBrowser.Linux.Configuration.Contracts;
 using SafeExamBrowser.Linux.Configuration.Cryptography;
@@ -184,6 +185,39 @@ namespace SafeExamBrowser.Linux.Configuration
 							logger.Error($"Failed to download configuration from '{resource}' -> {response.StatusCode}!");
 							status = LoadStatus.InvalidData;
 						}
+					}
+				}
+				else if (string.Equals(resource.Scheme, "data", StringComparison.OrdinalIgnoreCase))
+				{
+					// data:[<mediatype>][;base64],<data> — the standard way SEB configurations
+					// are distributed without a file or server.
+					var commaIndex = resource.OriginalString.IndexOf(',');
+
+					if (commaIndex > 0)
+					{
+						var meta = resource.OriginalString.Substring(0, commaIndex);
+						var payload = resource.OriginalString.Substring(commaIndex + 1);
+
+						try
+						{
+							data = new MemoryStream(meta.EndsWith(";base64", StringComparison.OrdinalIgnoreCase)
+								? Convert.FromBase64String(payload)
+								: Encoding.UTF8.GetBytes(Uri.UnescapeDataString(payload)));
+
+							status = LoadStatus.Success;
+						}
+						catch (FormatException)
+						{
+							logger.Error($"The data URI configuration '{resource.OriginalString[..Math.Min(64, resource.OriginalString.Length)]}...' does not contain valid base64 data!");
+
+							status = LoadStatus.InvalidData;
+						}
+					}
+					else
+					{
+						logger.Error("The data URI configuration does not contain a data part!");
+
+						status = LoadStatus.InvalidData;
 					}
 				}
 

@@ -4,10 +4,11 @@
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
- *
  * New implementation for the Linux port. The behavior of the controller corresponds to the
- * CEF handlers of the Windows version (RequestHandler, ResourceHandler, RenderProcessMessageHandler,
- * DownloadHandler and WindowHandlingResponsibility), reimplemented on top of the Chrome DevTools Protocol.
+ * CEF handlers of the Windows version (RequestHandler, ResourceHandler and DownloadHandler),
+ * reimplemented on top of the Chrome DevTools Protocol. All locking behavior (request filter,
+ * clipboard, print, zoom, kiosk, process and VM monitoring) has been removed: every request
+ * is allowed, all tabs and downloads work and the browser runs in a normal window.
  */
 
 using System;
@@ -18,13 +19,13 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
+
 using System.Threading;
 using System.Threading.Tasks;
 using SafeExamBrowser.Linux.Browser.Cdp;
 using SafeExamBrowser.Linux.Browser.Chromium;
 using SafeExamBrowser.Linux.Browser.Content;
-using SafeExamBrowser.Linux.Browser.Filtering;
+
 using SafeExamBrowser.Linux.Configuration.Contracts;
 using SafeExamBrowser.Linux.Configuration.Cryptography;
 using SafeExamBrowser.Linux.Configuration.Settings;
@@ -37,7 +38,6 @@ namespace SafeExamBrowser.Linux.Browser
 	public sealed class BrowserConfiguration
 	{
 		public BrowserSettings Settings { get; set; } = new BrowserSettings();
-		public SecuritySettings Security { get; set; } = new SecuritySettings();
 
 		/// <summary>
 		/// The Chromium executable to be used, or null to auto-detect.
@@ -59,10 +59,6 @@ namespace SafeExamBrowser.Linux.Browser
 		/// </summary>
 		public string LogFile { get; set; }
 
-		/// <summary>
-		/// Determines whether the browser is to be launched in kiosk mode, or null to use the window mode of the configuration.
-		/// </summary>
-		public bool? KioskMode { get; set; }
 
 		/// <summary>
 		/// The logger to be used, or null to use a console logger.
@@ -72,8 +68,8 @@ namespace SafeExamBrowser.Linux.Browser
 
 	/// <summary>
 	/// Controls a Chromium-based browser session according to the SEB configuration: injects the
-	/// SEB JavaScript API, filters requests, sends the browser exam key and configuration key
-	/// headers, handles the quit URL and downloads and restricts clipboard and zoom behavior.
+	/// SEB JavaScript API and sends the browser exam key and configuration key headers. The
+	/// session is unlocked: no requests are filtered, all tabs, downloads and input work.
 	/// </summary>
 	public sealed class BrowserController : IAsyncDisposable
 	{
@@ -88,16 +84,14 @@ namespace SafeExamBrowser.Linux.Browser
 		private readonly SemaphoreSlim eventLock = new SemaphoreSlim(1, 1);
 		private readonly KeyGenerator keyGenerator;
 		private readonly ILogger logger;
-		private readonly RequestFilter requestFilter = new RequestFilter();
+
 		private readonly Dictionary<string, TargetState> targets = new Dictionary<string, TargetState>();
 		private readonly HashSet<string> attachedTargets = new HashSet<string>();
 		private readonly TaskCompletionSource<bool> browserExit = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
 		private CdpConnection connection;
 		private BrowserLauncher launcher;
-		private string blockedContent;
-		private string blockedPage;
-		private bool filterEnabled;
+
 		private TaskCompletionSource<TargetState> firstPageReady;
 		private string profileDirectory;
 		private bool profileIsEphemeral;
@@ -114,10 +108,7 @@ namespace SafeExamBrowser.Linux.Browser
 			keyGenerator = new KeyGenerator(logger);
 		}
 
-		/// <summary>
-		/// Invoked when a request has been blocked by the request filter.
-		/// </summary>
-		public event Action<string> RequestBlocked;
+
 
 		/// <summary>
 		/// Invoked when the start URL has been loaded successfully.
@@ -164,8 +155,7 @@ namespace SafeExamBrowser.Linux.Browser
 
 			keyGenerator.UseCustomBrowserExamKey(settings.CustomBrowserExamKey);
 
-			InitializeRequestFilter();
-			InitializeAppConfigValues();
+
 
 			quitUrlPattern = string.IsNullOrWhiteSpace(settings.QuitUrl)
 				? default(Regex)
@@ -179,7 +169,7 @@ namespace SafeExamBrowser.Linux.Browser
 			{
 				ExecutablePath = configuration.ChromiumExecutablePath,
 				ProfileDirectory = profileIsEphemeral ? default(string) : GetPersistentProfileDirectory(),
-				KioskMode = configuration.KioskMode ?? settings.MainWindow.WindowMode == WindowMode.Fullscreen,
+
 				LogFile = configuration.LogFile,
 				Settings = settings
 			}, cancellationToken);
@@ -303,44 +293,6 @@ namespace SafeExamBrowser.Linux.Browser
 			eventLock.Dispose();
 		}
 
-		private void InitializeAppConfigValues()
-		{
-			blockedContent = contentLoader.LoadBlockedContent("This content has been blocked by Safe Exam Browser.");
-			blockedPage = contentLoader.LoadBlockedPage("Safe Exam Browser", "This page has been blocked by Safe Exam Browser.", "Back");
-		}
-
-		private void InitializeRequestFilter()
-		{
-			var settings = configuration.Settings;
-
-			filterEnabled = settings.Filter.EnableContentRequestFilter || settings.Filter.EnableMainRequestFilter;
-
-			if (!filterEnabled)
-			{
-				logger.Debug("Request filter is disabled.");
-				return;
-			}
-
-			foreach (var rule in settings.Filter.Rules)
-			{
-				var filterRule = RuleFactory.CreateRule(rule.ExpressionIsRegex);
-
-				filterRule.Initialize(rule.Expression, rule.Action ? FilterResult.Allow : FilterResult.Block);
-				requestFilter.Load(filterRule);
-			}
-
-			logger.Debug($"Initialized request filter with {settings.Filter.Rules.Count} rule(s).");
-
-			if (requestFilter.Process(new Request { Url = settings.StartUrl }) != FilterResult.Allow)
-			{
-				var rule = RuleFactory.CreateRule(isRegex: false);
-
-				rule.Initialize(settings.StartUrl, FilterResult.Allow);
-				requestFilter.Load(rule);
-
-				logger.Debug($"Automatically created filter rule to allow the start URL '{settings.StartUrl}'.");
-			}
-		}
 
 		private async Task InitializeBrowserAsync(CancellationToken cancellationToken)
 		{
@@ -353,7 +305,7 @@ namespace SafeExamBrowser.Linux.Browser
 
 			await connection.SendAsync("Browser.setDownloadBehavior", new
 			{
-				behavior = settings.AllowDownloads ? "allow" : "deny",
+				behavior = "allow",
 				downloadPath = downloadDirectory,
 				eventsEnabled = true
 			});
@@ -456,9 +408,7 @@ namespace SafeExamBrowser.Linux.Browser
 				case "Page.frameNavigated":
 					HandleFrameNavigated(@event);
 					break;
-				case "Page.fileChooserOpened":
-					await HandleFileChooserOpenedAsync(@event);
-					break;
+
 				case "Fetch.requestPaused":
 					await HandleRequestPausedAsync(@event);
 					break;
@@ -549,7 +499,7 @@ namespace SafeExamBrowser.Linux.Browser
 						state.PageUrl = frame.TryGetProperty("url", out var url) ? url.GetString() : default;
 					}
 
-					await connection.SendAsync("Page.setInterceptFileChooserDialog", new { enabled = !configuration.Settings.AllowUploads }, state.SessionId);
+
 				}
 				catch (Exception e)
 				{
@@ -640,15 +590,6 @@ namespace SafeExamBrowser.Linux.Browser
 			}
 		}
 
-		private async Task HandleFileChooserOpenedAsync(CdpEvent @event)
-		{
-			if (!configuration.Settings.AllowUploads)
-			{
-				logger.Info("Blocked file chooser dialog (uploads are disabled).");
-
-				await connection.SendAsync("Page.handleFileChooser", new { action = "cancel" }, @event.SessionId);
-			}
-		}
 
 		private void HandleDownloadWillBegin(CdpEvent @event)
 		{
@@ -731,13 +672,6 @@ namespace SafeExamBrowser.Linux.Browser
 			var isDocument = resourceType == "Document";
 			var isMainFrame = isDocument && target != default && frameId == target.RootFrameId;
 
-			if (IsMailtoUrl(url))
-			{
-				logger.Info($"Blocked mailto request '{url}'.");
-
-				await FailRequestAsync(requestId, sessionId, "BlockedByClient");
-				return;
-			}
 
 			var rewritten = RewriteSebScheme(url);
 
@@ -750,11 +684,6 @@ namespace SafeExamBrowser.Linux.Browser
 				return;
 			}
 
-			if (ShouldBlockRequest(target, resourceType, isMainFrame, rewritten, out var blocked))
-			{
-				await FulfillBlockedRequestAsync(requestId, sessionId, isDocument, isMainFrame, blocked);
-				return;
-			}
 
 			if (isMainFrame && configuration.Settings.AllowConfigurationDownloads && IsConfigurationFile(rewritten))
 			{
@@ -765,15 +694,6 @@ namespace SafeExamBrowser.Linux.Browser
 				return;
 			}
 
-			if (configuration.Settings.AllowPdfReader && !configuration.Settings.AllowPdfReaderToolbar && isMainFrame)
-			{
-				if (rewritten.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && !rewritten.Contains(PDF_TOOLBAR_FRAGMENT))
-				{
-					rewritten = $"{rewritten}{PDF_TOOLBAR_FRAGMENT}";
-
-					logger.Debug($"Adding fragment to disable the PDF reader toolbar for '{url}'.");
-				}
-			}
 
 			if (isDocument && target != default)
 			{
@@ -799,69 +719,6 @@ namespace SafeExamBrowser.Linux.Browser
 			}, sessionId);
 		}
 
-		private bool ShouldBlockRequest(TargetState target, string resourceType, bool isMainFrame, string url, out string blockedUrl)
-		{
-			blockedUrl = default;
-
-			if (!filterEnabled)
-			{
-				return false;
-			}
-
-			var decoded = WebUtility.UrlDecode(url);
-
-			if (!Uri.TryCreate(decoded, UriKind.Absolute, out _))
-			{
-				logger.Warn($"Filter could not process request for '{url}' ({resourceType})!");
-
-				return false;
-			}
-
-			var settings = configuration.Settings;
-			var result = requestFilter.Process(new Request { Url = decoded });
-			var block = false;
-
-			if (result == FilterResult.Block)
-			{
-				// The Windows version blocks main frame requests if either the main or the content
-				// filter is enabled (see RequestHandler and ResourceHandler).
-				block = isMainFrame
-					? settings.Filter.EnableMainRequestFilter || settings.Filter.EnableContentRequestFilter
-					: settings.Filter.EnableContentRequestFilter;
-			}
-
-			if (block)
-			{
-				blockedUrl = decoded;
-
-				logger.Info($"Blocked {(isMainFrame ? "main" : "content")} request for '{decoded}' ({resourceType}).");
-			}
-
-			return block;
-		}
-
-		private async Task FulfillBlockedRequestAsync(string requestId, string sessionId, bool isDocument, bool isMainFrame, string url)
-		{
-			// Frame requests are rendered with the blocked page, all other content requests with
-			// the blocked content snippet (see ResourceHandler.ResourceHandlerFor).
-			var html = isDocument ? blockedPage : blockedContent;
-
-			if (isMainFrame)
-			{
-				RequestBlocked?.Invoke(url);
-			}
-
-			await connection.SendAsync("Fetch.fulfillRequest", new
-			{
-				requestId,
-				responseCode = 200,
-				responseHeaders = new[]
-				{
-					new { name = "Content-Type", value = "text/html; charset=utf-8" }
-				},
-				body = Convert.ToBase64String(Encoding.UTF8.GetBytes(html))
-			}, sessionId);
-		}
 
 		private object[] AppendCustomHeaders(TargetState target, JsonElement request, string url, bool isMainFrame)
 		{
@@ -932,26 +789,6 @@ namespace SafeExamBrowser.Linux.Browser
 			script.AppendLine();
 			script.AppendLine($"window.SafeExamBrowser.security.updateKeys = (callback) => callback();");
 
-			if (!settings.AllowPrint)
-			{
-				script.AppendLine($"window.print = function () {{ alert('{PRINT_NOT_ALLOWED_MESSAGE}'); }};");
-			}
-
-			if (!settings.AllowPageZoom)
-			{
-				script.AppendLine(contentLoader.LoadPageZoom());
-			}
-
-			var policy = configuration.Security.ClipboardPolicy;
-
-			if (policy == ClipboardPolicy.Block)
-			{
-				script.AppendLine(contentLoader.LoadBlockClipboard());
-			}
-			else if (policy == ClipboardPolicy.Isolated)
-			{
-				script.AppendLine(contentLoader.LoadIsolatedClipboard());
-			}
 
 			if (target.LastScript == script.ToString())
 			{
@@ -1053,10 +890,6 @@ namespace SafeExamBrowser.Linux.Browser
 			return quitUrlPattern != default && quitUrlPattern.IsMatch(url);
 		}
 
-		private bool IsMailtoUrl(string url)
-		{
-			return url.StartsWith(Uri.UriSchemeMailto, StringComparison.OrdinalIgnoreCase);
-		}
 
 		/// <summary>
 		/// Determines whether the URL points to a SEB configuration file, either with the .seb file

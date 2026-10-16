@@ -14,7 +14,7 @@ PREFIX="${1:-$HOME/.local}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "Publishing exam-unlock (Release)..."
-dotnet publish "$ROOT/src/SafeExamBrowser.Linux.Cli" -c Release -o "$ROOT/artifacts/exam-unlock" --nologo -v q
+dotnet publish "$ROOT/src/SafeExamBrowser.Linux.Cli" -c Release -r linux-x64 --self-contained true -o "$ROOT/artifacts/exam-unlock" --nologo -v q
 
 echo "Installing to $PREFIX..."
 install -d "$PREFIX/bin" "$PREFIX/lib/exam-unlock" "$PREFIX/share/applications" "$PREFIX/share/mime/packages"

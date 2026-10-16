@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Version>0.1.0</Version>
+    <Authors>Safe Exam Browser (Linux port) contributors</Authors>
+    <Product>Safe Exam Browser</Product>
+    <Description>Safe Exam Browser for Linux - lock down workstations for secure online exams.</Description>
+    <RepositoryType>git</RepositoryType>
+    <DebugType>embedded</DebugType>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+</Project>

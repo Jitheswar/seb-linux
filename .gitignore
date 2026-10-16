@@ -1,0 +1,19 @@
+# Build results
+bin/
+obj/
+*.user
+
+# Rider / VS / VS Code
+.idea/
+.vs/
+.vscode/
+
+# Test artifacts
+TestResults/
+*.trx
+
+# Packaging output
+/dist/
+*.deb
+*.rpm
+*.AppImage

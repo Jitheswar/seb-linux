@@ -671,6 +671,31 @@ namespace SafeExamBrowser.Linux.Browser
 		private async Task HandleRequestPausedAsync(CdpEvent @event)
 		{
 			var sessionId = @event.SessionId;
+			var requestId = @event.Parameters.TryGetProperty("requestId", out var idElement) ? idElement.GetString() : default;
+
+			try
+			{
+				await HandleRequestPausedCoreAsync(@event);
+			}
+			catch (Exception e)
+			{
+				logger.Error($"Error while handling paused request '{requestId}'.", e);
+
+				// As a last resort, continue the request without modifications so that the page
+				// cannot remain blocked indefinitely.
+				try
+				{
+					await connection.SendAsync("Fetch.continueRequest", new { requestId }, sessionId);
+				}
+				catch (Exception)
+				{
+				}
+			}
+		}
+
+		private async Task HandleRequestPausedCoreAsync(CdpEvent @event)
+		{
+			var sessionId = @event.SessionId;
 			var parameters = @event.Parameters;
 			var requestId = parameters.GetProperty("requestId").GetString();
 			var request = parameters.GetProperty("request");
@@ -820,9 +845,12 @@ namespace SafeExamBrowser.Linux.Browser
 			var settings = configuration.Settings;
 			var headers = new List<KeyValuePair<string, string>>();
 
-			foreach (var header in request.GetProperty("headers").EnumerateObject())
+			if (request.TryGetProperty("headers", out var requestHeaders) && requestHeaders.ValueKind == JsonValueKind.Object)
 			{
-				headers.Add(new KeyValuePair<string, string>(header.Name, header.Value.ValueKind == JsonValueKind.String ? header.Value.GetString() : header.Value.ToString()));
+				foreach (var header in requestHeaders.EnumerateObject())
+				{
+					headers.Add(new KeyValuePair<string, string>(header.Name, header.Value.ValueKind == JsonValueKind.String ? header.Value.GetString() : header.Value.ToString()));
+				}
 			}
 
 			var pageUrl = GetPageUrl(target);

@@ -93,6 +93,18 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 
 			Directory.CreateDirectory(profileDirectory);
 
+			// Any endpoint file left over from a previous session must be removed, as it would
+			// otherwise be picked up as the endpoint of the current session (the browser only
+			// replaces the file once its debugging server has been started).
+			try
+			{
+				File.Delete(Path.Combine(profileDirectory, "DevToolsActivePort"));
+			}
+			catch (Exception e)
+			{
+				logger.Warn($"Could not remove the stale DevTools endpoint file from '{profileDirectory}': {e.Message}");
+			}
+
 			logger.Info($"Launching browser '{executable}' with profile '{profileDirectory}'.");
 			logger.Debug($"Browser arguments: {string.Join(" ", arguments)}");
 

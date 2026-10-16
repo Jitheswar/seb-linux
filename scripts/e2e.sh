@@ -170,6 +170,11 @@ wait_scenario() {
 	set -e
 }
 
+if (exec 3<>/dev/tcp/127.0.0.1/"$PORT") 2>/dev/null; then
+	fail "port $PORT is already in use (a previous mock server is still running; stop it and retry)"
+fi
+
+
 echo "== starting the mock server on port $PORT =="
 python3 "$E2E/server.py" --port "$PORT" --exam-config "$E2E/exam-config.seb" > "$WORK/server.log" 2>&1 &
 SERVER_PID=$!

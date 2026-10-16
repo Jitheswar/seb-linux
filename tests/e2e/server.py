@@ -488,16 +488,16 @@ class Handler(BaseHTTPRequestHandler):
 
             check("the connection was closed (DELETE)", STATE.deleted)
 
-        # The first document load of a new tab can precede request interception and is reloaded
-        # by the client, so the final load (and its headers) is what is verified per path.
-        last_header_checks = {}
-
+        # Every recorded request must carry the correct SEB headers — including the first
+        # document request of a new tab. An unsigned first request is the "login loop"
+        # regression: an LMS that validates the SEB identity bounces such a tab back to its
+        # login page.
         for header_check in STATE.header_checks:
-            last_header_checks[header_check["path"]] = header_check
-
-        for path in sorted(last_header_checks):
-            header_check = last_header_checks[path]
-            check(f"the SEB request headers for '{path}' match", header_check["ok"], f"configKeyHash={header_check['configKeyHash']} requestHash={header_check['requestHash']}")
+            check(
+                f"the SEB request headers for '{header_check['path']}' match",
+                header_check["ok"],
+                f"configKeyHash={header_check['configKeyHash']} (expected {header_check['expectedConfigKeyHash']}) requestHash={header_check['requestHash']} (expected {header_check['expectedRequestHash']})",
+            )
 
         return {
             "scenario": expect.get("scenario"),

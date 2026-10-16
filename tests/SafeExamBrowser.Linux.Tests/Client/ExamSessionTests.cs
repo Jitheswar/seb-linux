@@ -30,6 +30,17 @@ namespace SafeExamBrowser.Linux.Tests
 		}
 
 		[Fact]
+		public void MustRejectServerSessionMode()
+		{
+			var settings = new AppSettings();
+
+			settings.Browser.StartUrl = "https://exam.example.org/";
+			settings.ConfigurationFile.SessionMode = SessionMode.Server;
+
+			Assert.Contains("SEB Server", ExamSession.Validate(settings));
+		}
+
+		[Fact]
 		public void MustAcceptSettingsWithStartUrl()
 		{
 			var settings = new AppSettings();

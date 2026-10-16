@@ -9,11 +9,13 @@
  */
 
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using SafeExamBrowser.Linux.Browser;
 using SafeExamBrowser.Linux.Configuration.Contracts;
 using SafeExamBrowser.Linux.Configuration.Settings;
+using SafeExamBrowser.Linux.Security;
 
 namespace SafeExamBrowser.Linux.Client
 {
@@ -91,6 +93,13 @@ namespace SafeExamBrowser.Linux.Client
 		/// </summary>
 		public async Task<ExamSessionEndReason> RunAsync(CancellationToken cancellationToken = default)
 		{
+			var environmentProblem = ValidateEnvironment(settings);
+
+			if (environmentProblem != default)
+			{
+				throw new InvalidOperationException(environmentProblem);
+			}
+
 			var attempt = 0;
 
 			while (true)
@@ -111,27 +120,47 @@ namespace SafeExamBrowser.Linux.Client
 
 						logger.Info($"Exam session is running, start URL: '{settings.Browser.StartUrl}'.");
 
-						var completed = await Task.WhenAny(terminationRequested.Task, resetRequested.Task, browserExited.Task);
-
-						if (completed == resetRequested.Task)
+						using (var monitor = CreateProcessMonitor())
 						{
-							logger.Info("The session is being reset, the browser will be restarted with a clean session.");
-							continue;
+							monitor?.Start();
+
+							var completed = await Task.WhenAny(terminationRequested.Task, resetRequested.Task, browserExited.Task);
+
+							if (completed == resetRequested.Task)
+							{
+								logger.Info("The session is being reset, the browser will be restarted with a clean session.");
+								continue;
+							}
+
+							if (completed == browserExited.Task)
+							{
+								logger.Warn("The browser process has exited unexpectedly!");
+
+								return ExamSessionEndReason.BrowserExited;
+							}
+
+							logger.Info("Termination requested, shutting down the exam session...");
+
+							return ExamSessionEndReason.Terminated;
 						}
-
-						if (completed == browserExited.Task)
-						{
-							logger.Warn("The browser process has exited unexpectedly!");
-
-							return ExamSessionEndReason.BrowserExited;
-						}
-
-						logger.Info("Termination requested, shutting down the exam session...");
-
-						return ExamSessionEndReason.Terminated;
 					}
 				}
 			}
+		}
+
+		/// <summary>
+		/// Validates the environment in which the exam session is to be run: virtual machines
+		/// are rejected unless the configuration allows them (see Security.AllowVirtualMachine).
+		/// Returns null if the environment is valid, otherwise a description of the problem.
+		/// </summary>
+		public static string ValidateEnvironment(AppSettings settings)
+		{
+			if (settings != default && !settings.Security.AllowVirtualMachine && VirtualMachineDetector.IsVirtualMachine())
+			{
+				return "This exam is not allowed to be run inside a virtual machine!";
+			}
+
+			return default;
 		}
 
 		/// <summary>
@@ -143,6 +172,11 @@ namespace SafeExamBrowser.Linux.Client
 			if (settings == default)
 			{
 				return "No configuration has been loaded.";
+			}
+
+			if (settings.ConfigurationFile.SessionMode == SessionMode.Server)
+			{
+				return "This configuration requires a SEB Server session, which is not supported by this client yet!";
 			}
 
 			if (string.IsNullOrWhiteSpace(settings.Browser.StartUrl))
@@ -191,6 +225,31 @@ namespace SafeExamBrowser.Linux.Client
 			_ = controller.WaitForExitAsync().ContinueWith(task => browserExited.TrySetResult(true), TaskContinuationOptions.OnlyOnRanToCompletion);
 
 			return controller;
+		}
+
+		private ProcessMonitor CreateProcessMonitor()
+		{
+			var policy = new ProcessPolicy(settings.Applications);
+
+			if (!policy.HasRules)
+			{
+				return default;
+			}
+
+			var monitor = new ProcessMonitor(policy, logger);
+
+			// The browser and the client itself must never be terminated by the monitor.
+			monitor.Ignore("chrome");
+			monitor.Ignore("chromium");
+			monitor.Ignore("chromium-browser");
+			monitor.Ignore(Process.GetCurrentProcess().ProcessName);
+			monitor.Ignore("seb-linux");
+
+			monitor.ProcessDetected += process => logger.Warn($"Blocked application '{process.Name}' ({process.ProcessId}) is running!");
+
+			logger.Info($"Process monitor activated with {settings.Applications.Whitelist.Count + settings.Applications.Blacklist.Count} configured application(s).");
+
+			return monitor;
 		}
 
 		private bool VerifyQuitPassword()

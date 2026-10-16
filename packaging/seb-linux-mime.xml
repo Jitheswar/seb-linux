@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-safe-exam-browser">
+    <comment>Safe Exam Browser configuration</comment>
+    <comment xml:lang="de">Safe Exam Browser Konfiguration</comment>
+    <glob pattern="*.seb"/>
+  </mime-type>
+</mime-info>

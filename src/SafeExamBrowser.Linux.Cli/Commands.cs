@@ -130,6 +130,15 @@ namespace SafeExamBrowser.Linux.Cli
 				return EXIT_CONFIGURATION;
 			}
 
+			problem = ExamSession.ValidateEnvironment(result.Settings);
+
+			if (problem != default)
+			{
+				Console.Error.WriteLine(problem);
+
+				return EXIT_CONFIGURATION;
+			}
+
 			using (var cancellation = new CancellationTokenSource())
 			{
 				Console.CancelKeyPress += (sender, eventArgs) =>

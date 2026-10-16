@@ -187,7 +187,7 @@ namespace SafeExamBrowser.Linux.Browser
 				throw new InvalidOperationException("The browser has not been launched yet!");
 			}
 
-			await connection.SendAsync("Page.navigate", new { url }, startPage.SessionId);
+			await connection.SendAsync("Page.navigate", new { url = RewriteSebScheme(url) }, startPage.SessionId);
 		}
 
 		/// <summary>

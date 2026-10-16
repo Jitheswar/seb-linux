@@ -305,17 +305,19 @@ namespace SafeExamBrowser.Linux.Browser
 			await connection.SendAsync("Target.setDiscoverTargets", new { discover = true });
 
 			// All supported targets (pages, frames, workers) are attached automatically, so a new
-			// tab is intercepted as soon as it exists. If the first document request of a new tab
-			// is issued before interception is enabled for its session, the page is reloaded once,
-			// so every document is loaded through request interception (see
-			// EnsureInterceptedDocumentAsync).
+			// tab is intercepted as soon as it exists. With 'waitForDebuggerOnStart', the first
+			// document of a newly created page target is held — before its request is dispatched
+			// — until the session is released via 'Runtime.runIfWaitingForDebugger' (see
+			// InitializeSessionAsync). Enabling request interception for the session therefore
+			// always wins the race, and every document (including the very first request of a
+			// new tab) is loaded through request interception. Targets that already existed
+			// when the browser was attached (e.g. the initial about:blank tab) are not held,
+			// because their first document started before any debugger was attached.
 			await connection.SendAsync("Target.setAutoAttach", new
 			{
 				autoAttach = true,
 				flatten = true,
-				// Newer Chrome versions require the parameter; the wait itself is not used, as it
-				// does not reliably hold the first navigation of a window.open target.
-				waitForDebuggerOnStart = false,
+				waitForDebuggerOnStart = true,
 				filter = new[]
 				{
 					new { type = "page" },
@@ -468,35 +470,15 @@ namespace SafeExamBrowser.Linux.Browser
 
 			var hasPageDomain = state.Type == "page" || state.Type == "iframe" || state.Type == "webview";
 
-			if (hasPageDomain)
-			{
-				try
-				{
-					await connection.SendAsync("Page.enable", sessionId: state.SessionId);
-
-					var tree = await connection.SendAsync("Page.getFrameTree", sessionId: state.SessionId);
-
-					if (tree.ValueKind == JsonValueKind.Object && tree.TryGetProperty("frameTree", out var frameTree) && frameTree.TryGetProperty("frame", out var frame))
-					{
-						state.RootFrameId = frame.GetProperty("id").GetString();
-						state.PageUrl = frame.TryGetProperty("url", out var url) ? url.GetString() : default;
-					}
-				}
-				catch (Exception e)
-				{
-					logger.Debug($"Could not initialize page domain for target {state.TargetId}: {e.Message}");
-				}
-
-				try
-				{
-					await PrepareScriptUpdateAsync(state, state.PageUrl ?? "about:blank");
-				}
-				catch (Exception e)
-				{
-					logger.Debug($"Could not inject scripts into target {state.TargetId}: {e.Message}");
-				}
-			}
-
+			// The first document of a new page target is held until the session is released
+			// (see InitializeBrowserAsync), and the renderer of a held target does not process
+			// commands. Request interception is therefore enabled first (a browser-side command
+			// that responds even while the target is held), and the document is released right
+			// after. The remaining page domain commands are only written to the socket and their
+			// responses are collected in the background (see PrepareScriptUpdateAsync); the
+			// command queue guarantees that they are registered before the document loads. The
+			// page's frame ID and URL are taken from the first navigation event (see
+			// HandleFrameNavigated), not from a frame tree query.
 			try
 			{
 				await connection.SendAsync("Fetch.enable", new
@@ -509,13 +491,22 @@ namespace SafeExamBrowser.Linux.Browser
 				logger.Debug($"Could not enable request interception for target {state.TargetId}: {e.Message}");
 			}
 
-			// The document of a new tab can already be loaded before request interception is
-			// enabled, and no navigation events are delivered for such a load. The frame state
-			// determined above is the deterministic signal for that case. This must run after
-			// Fetch.enable, so that the reload is intercepted.
 			if (hasPageDomain)
 			{
-				EnsureInterceptedDocumentAsync(state, state.PageUrl);
+				// Release the held first document; the request it dispatches is intercepted by
+				// the just enabled Fetch domain.
+				connection.Post("Runtime.runIfWaitingForDebugger", sessionId: state.SessionId);
+
+				try
+				{
+					await PrepareScriptUpdateAsync(state, "about:blank");
+				}
+				catch (Exception e)
+				{
+					logger.Debug($"Could not inject scripts into target {state.TargetId}: {e.Message}");
+				}
+
+				connection.Post("Page.enable", sessionId: state.SessionId);
 			}
 
 			if (state.Type == "page")
@@ -559,10 +550,12 @@ namespace SafeExamBrowser.Linux.Browser
 		}
 
 		/// <summary>
-		/// The first document request of a new tab can be issued before request interception is
-		/// enabled for its session. Such a document is loaded without the Safe Exam Browser headers
-		/// and scripts, so the page is reloaded once. The reload is guaranteed to pass through
-		/// interception, because it is enabled before the navigation event is processed.
+		/// Safety net: if a document of a page target is ever loaded without interception
+		/// (which cannot happen for new targets, because their first document is held until
+		/// interception is enabled — see InitializeBrowserAsync — but can happen for a target
+		/// attached after its document was already dispatched), the page is reloaded once. The
+		/// reload is guaranteed to pass through interception, because it is enabled before the
+		/// navigation event is processed.
 		/// </summary>
 		private void EnsureInterceptedDocumentAsync(TargetState state, string url)
 		{
@@ -662,6 +655,16 @@ namespace SafeExamBrowser.Linux.Browser
 			targets.TryGetValue(sessionId ?? "", out var target);
 
 			var isDocument = resourceType == "Document";
+
+			// The first document request of a new page target always belongs to its main frame
+			// (no frame can exist before it). Its frame ID is adopted here so that the request
+			// is already signed as a main frame request; the first navigation event confirms
+			// the same frame.
+			if (isDocument && target != default && target.Type == "page" && target.RootFrameId == default && !string.IsNullOrEmpty(frameId))
+			{
+				target.RootFrameId = frameId;
+			}
+
 			var isMainFrame = isDocument && target != default && frameId == target.RootFrameId;
 
 			var rewritten = RewriteSebScheme(url);

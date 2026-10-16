@@ -52,6 +52,7 @@ namespace SafeExamBrowser.Linux.Configuration.ConfigurationData
 			internal const string AllowPrint = "allowPrint";
 			internal const string AllowSpellChecking = "allowSpellCheck";
 			internal const string AllowUploads = "allowUploads";
+			internal const string CustomBrowserExamKey = "browserExamKey";
 			internal const string CustomUserAgentDesktop = "browserUserAgentWinDesktopModeCustom";
 			internal const string CustomUserAgentMobile = "browserUserAgentWinTouchModeCustom";
 			internal const string DeleteCacheOnShutdown = "removeBrowserProfile";

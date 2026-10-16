@@ -34,10 +34,20 @@ namespace SafeExamBrowser.Linux.Configuration.Contracts
 
 		/// <summary>
 		/// The SEB build version, analogous to the file version on Windows. Part of the BEK.
+		/// Build metadata (e.g. the source revision) is not part of the version.
 		/// </summary>
-		public static string ProgramBuildVersion =>
-			Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-			?? Assembly.GetExecutingAssembly().GetName().Version?.ToString()
-			?? "0.0.0";
+		public static string ProgramBuildVersion
+		{
+			get
+			{
+				var version = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+					?? Assembly.GetExecutingAssembly().GetName().Version?.ToString()
+					?? "0.0.0";
+
+				var separator = version.IndexOf('+');
+
+				return separator < 0 ? version : version.Substring(0, separator);
+			}
+		}
 	}
 }

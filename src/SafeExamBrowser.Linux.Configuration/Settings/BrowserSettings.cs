@@ -49,6 +49,12 @@ namespace SafeExamBrowser.Linux.Configuration.Settings
 		/// </summary>
 		public string ConfigurationKey { get; set; }
 
+		/// <summary>
+		/// A custom browser exam key which overrides the value calculated from the configuration.
+		/// Used when the browser exam key is provided by a SEB Server (see also <see cref="BrowserExamKeySalt"/>).
+		/// </summary>
+		public string CustomBrowserExamKey { get; set; }
+
 		public string CustomUserAgent { get; set; }
 		public bool DeleteCacheOnShutdown { get; set; }
 		public bool DeleteCookiesOnShutdown { get; set; }

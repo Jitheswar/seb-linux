@@ -103,6 +103,7 @@ namespace SafeExamBrowser.Linux.Configuration.ConfigurationData
 			SetBool(data, Keys.Browser.UseQueryParameter, v => settings.Browser.UseQueryParameter = v);
 			SetBool(data, Keys.Browser.UseTemporaryDownUploadDirectory, v => settings.Browser.UseTemporaryDownUploadDirectory = v);
 
+			SetString(data, Keys.Browser.CustomBrowserExamKey, v => settings.Browser.CustomBrowserExamKey = v);
 			SetString(data, Keys.Browser.DownloadDirectory, v => settings.Browser.DownloadDirectory = v);
 			SetString(data, Keys.Browser.HomeButtonMessage, v => settings.Browser.HomeButtonMessage = v);
 			SetString(data, Keys.Browser.HomeButtonUrl, v => settings.Browser.HomeUrl = v);

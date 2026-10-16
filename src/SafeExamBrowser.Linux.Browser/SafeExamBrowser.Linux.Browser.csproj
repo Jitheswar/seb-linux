@@ -1,6 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <EmbeddedResource Include="Content\*.js" />
+    <EmbeddedResource Include="Content\*.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SafeExamBrowser.Linux.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\SafeExamBrowser.Linux.Configuration\SafeExamBrowser.Linux.Configuration.csproj" />
   </ItemGroup>
 

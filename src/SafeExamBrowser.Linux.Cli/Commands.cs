@@ -148,9 +148,11 @@ namespace SafeExamBrowser.Linux.Cli
 				var reason = await session.RunAsync(cancellation.Token);
 
 				Console.Error.WriteLine($"Exam session ended ({reason}).");
-			}
 
-			return EXIT_SUCCESS;
+				// A session that ends without a quit request (e.g. the browser process
+				// crashed) is a runtime failure, not a successful run.
+				return reason == ExamSessionEndReason.BrowserExited ? EXIT_RUNTIME : EXIT_SUCCESS;
+			}
 		}
 
 		private static ILogger CreateLogger(CommandLineOptions options)

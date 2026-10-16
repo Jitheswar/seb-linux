@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 #
-# End-to-end tests for seb-linux (see tests/e2e/README.md).
+# End-to-end tests for exam-unlock (see tests/e2e/README.md).
 #
 # Scenario "normal":
-#   seb-linux run <normal.seb>: loads the exam page, sends the SEB request headers
-#   (config key hash, request hash) and terminates via the quit URL.
+#   exam-unlock run <normal.seb>: loads the exam page, sends the SEB request
+#   headers (config key hash, request hash), opens a new tab (with its own
+#   per-URL key hashes and the SEB JavaScript API), downloads a file and
+#   terminates via the quit URL. The browser runs in a normal window (no
+#   kiosk mode) and the session works on virtual machines.
 #
 # Scenario "server":
-#   seb-linux run <server-mode.seb>: connects to the mock SEB Server, performs the
-#   handshake, exchanges an app signature key (verified with the JCE reference
+#   exam-unlock run <server-mode.seb>: connects to the mock SEB Server, performs
+#   the handshake, exchanges an app signature key (verified with the JCE reference
 #   implementation of the server), downloads the exam configuration, runs the exam
 #   and is terminated by a SEB_QUIT instruction.
 #
@@ -17,11 +20,16 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 E2E="$ROOT/tests/e2e"
 PORT="${SEB_E2E_PORT:-8765}"
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/seb-e2e.XXXXXX")"
-CLI="$ROOT/src/SafeExamBrowser.Linux.Cli/bin/Debug/net8.0/seb-linux"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/exam-unlock-e2e.XXXXXX")"
+CLI="$ROOT/src/SafeExamBrowser.Linux.Cli/bin/Debug/net8.0/exam-unlock"
 
 # The app signature key verifies the default build identifier.
 unset SEB_LINUX_BEK_SIGNATURE
+
+# Run the client with an isolated HOME so the browser profile and the
+# download directory do not touch the real user data.
+E2E_HOME="$WORK/home"
+mkdir -p "$E2E_HOME"
 
 fail() {
 	echo "FAIL: $*" >&2
@@ -94,6 +102,15 @@ dotnet build "$ROOT/src/SafeExamBrowser.Linux.Cli" -v q --nologo
 
 [ -x "$CLI" ] || fail "the CLI has not been built ($CLI)"
 
+# Virtual machine detection has been removed: on a VM the session must run
+# exactly as on physical hardware.
+if [ -r /sys/class/dmi/id/product_name ] \
+   && grep -qiE 'vmware|virtualbox|kvm|qemu|innotek|xen|hyper-v|parallels|bochs|bhyve|virtual machine' \
+      /sys/class/dmi/id/product_name /sys/class/dmi/id/sys_vendor \
+      /sys/class/dmi/id/board_vendor /sys/class/dmi/id/bios_vendor 2>/dev/null; then
+	echo "  (running inside a virtual machine: VM detection is disabled, the session must not be rejected)"
+fi
+
 echo "== starting the mock server on port $PORT =="
 python3 "$E2E/server.py" --port "$PORT" --exam-config "$E2E/exam-config.seb" > "$WORK/server.log" 2>&1 &
 SERVER_PID=$!
@@ -142,13 +159,23 @@ PY
 )" > /dev/null
 
 set +e
-SEB_HEADLESS=1 timeout 90 "$CLI" run "$E2E/normal.seb" --debug > "$WORK/normal.log" 2>&1
+SEB_HEADLESS=1 HOME="$E2E_HOME" timeout 90 "$CLI" run "$E2E/normal.seb" --debug > "$WORK/normal.log" 2>&1
 STATUS=$?
 set -e
 
 [ "$STATUS" -eq 0 ] || fail "scenario 1: the client exited with status $STATUS (see $WORK/normal.log)"
 
 grep -q "Exam session ended (Terminated)" "$WORK/normal.log" || fail "scenario 1: the session was not terminated via the quit URL (see $WORK/normal.log)"
+
+# The browser must run in a normal window, never in kiosk mode.
+grep -q "Browser arguments:" "$WORK/normal.log" || fail "scenario 1: the browser arguments were not logged (see $WORK/normal.log)"
+if grep "Browser arguments:" "$WORK/normal.log" | grep -q -- "--kiosk"; then
+	fail "scenario 1: the browser was launched in kiosk mode (see $WORK/normal.log)"
+fi
+
+# Downloads must work and be stored on disk.
+[ -f "$E2E_HOME/Downloads/e2e-download.txt" ] || fail "scenario 1: the download was not saved to disk (see $WORK/normal.log)"
+grep -q "download-ok" "$E2E_HOME/Downloads/e2e-download.txt" || fail "scenario 1: the downloaded file has unexpected content"
 
 control GET /control/summary > "$WORK/summary-normal.json"
 run_summary "$WORK/summary-normal.json" normal || fail "scenario 1: server-side verification failed"
@@ -175,7 +202,7 @@ PY
 )" > /dev/null
 
 set +e
-SEB_HEADLESS=1 timeout 90 "$CLI" run "$E2E/server-mode.seb" --debug > "$WORK/session.log" 2>&1
+SEB_HEADLESS=1 HOME="$E2E_HOME" timeout 90 "$CLI" run "$E2E/server-mode.seb" --debug > "$WORK/session.log" 2>&1
 STATUS=$?
 set -e
 

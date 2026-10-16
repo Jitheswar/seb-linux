@@ -1,33 +1,40 @@
-# Safe Exam Browser for Linux
+# exam-unlock
 
-A Linux port of [Safe Exam Browser](https://safeexambrowser.org) (SEB) that runs
-real online exams: it loads genuine `.seb` configurations, sends the
-**Config Key** and **Browser Exam Key** to exam systems (Moodle *quizaccess_seb*,
-Inspera, ...), exposes the SEB JavaScript API to exam pages and locks the
-browser down according to the configuration.
+An **unlocked** Safe Exam Browser for **Linux and Windows**. It runs real
+online exams exactly the way SEB does — it loads genuine `.seb`
+configurations, sends the **Config Key** and **Browser Exam Key** to exam
+systems (Moodle *quizaccess_seb*, Inspera, ...), exposes the SEB JavaScript
+API to exam pages — but with **no lockdown**: there is no request filter,
+no kiosk, no process or virtual-machine monitoring and no clipboard, print
+or zoom restrictions. Tabs, downloads and every other browser feature work
+normally, and the client runs unchanged on virtual machines.
 
-Unlike the Windows and macOS clients, which embed a Chromium/WebKit runtime,
-this port drives the **system Chromium** through the
+Unlike the Windows and macOS SEB clients, which embed a Chromium/WebKit
+runtime, this client drives the **system Chromium-based browser** (Chromium,
+Google Chrome or Brave) through the
 [Chrome DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/).
 It is written in C#/.NET 8 with **zero NuGet dependencies** in `src/`.
 
-## Status
+## What is and is not locked
 
-| Area | State |
-| --- | --- |
-| Configuration engine (plist XML, gzip, pswd/pwcc, Config Key) | ✅ verified against upstream & Moodle gold vectors |
-| Browser control (CDP), request filter, exam key headers | ✅ verified end-to-end |
-| SEB JavaScript API (`window.SafeExamBrowser`) | ✅ |
-| Isolated / blocked clipboard, page zoom, print restrictions | ✅ |
-| Quit URL (+ quit password), session reset, downloads | ✅ |
-| Process monitor (forbidden applications), VM detection | ✅ |
-| SEB Server (`seb-server`) integration | ⏳ not implemented |
-| Certificate-encrypted configurations (`pkhs`/`phsk`) | ❌ not supported (see below) |
-| Debian/RPM packages | ⏳ use `scripts/install.sh` for now |
+| Area | SEB | exam-unlock |
+| --- | --- | --- |
+| Config Key / Browser Exam Key request headers | ✅ | ✅ kept |
+| SEB user agent (`SEB/<version>`) | ✅ | ✅ kept |
+| `window.SafeExamBrowser` JavaScript API | ✅ | ✅ kept (all documents, incl. new tabs) |
+| Quit URL (+ quit password), SEB Server mode | ✅ | ✅ kept |
+| Request / URL filter (block-by-default) | ✅ | ❌ removed — every request is allowed |
+| Kiosk / fullscreen enforcement | ✅ | ❌ removed — normal window |
+| Process monitor (terminates applications) | ✅ | ❌ removed |
+| Virtual machine detection | ✅ | ❌ removed — runs on any VM |
+| Clipboard blocking / isolation | ✅ | ❌ removed |
+| Print / page zoom restrictions | ✅ | ❌ removed |
+| New tab / window restrictions | ✅ | ❌ removed — tabs work |
+| Download blocking | configurable | ❌ removed — downloads always allowed |
 
 ## Quick start
 
-Requirements: .NET 8 SDK and Chromium (or Google Chrome).
+Requirements: .NET 8 SDK (build) and Chromium or Google Chrome (runtime).
 
 ```sh
 dotnet build
@@ -42,12 +49,22 @@ dotnet run --project src/SafeExamBrowser.Linux.Cli -- keys  exam.seb --url https
 dotnet run --project src/SafeExamBrowser.Linux.Cli -- run exam.seb
 ```
 
-Install for the current user: `./scripts/install.sh` (binary: `~/.local/bin/seb-linux`).
+Build binaries for both platforms (self-contained, no .NET runtime needed on
+the target machine):
+
+```sh
+scripts/build.sh
+# -> artifacts/exam-unlock-linux-x64/exam-unlock
+# -> artifacts/exam-unlock-win-x64/exam-unlock.exe
+```
+
+Install for the current user (Linux): `./scripts/install.sh`
+(binary: `~/.local/bin/exam-unlock`).
 
 ### CLI
 
 ```
-seb-linux <command> <configuration> [options]
+exam-unlock <command> <configuration> [options]
 
 Commands:
   run     Start an exam session with the given configuration
@@ -59,21 +76,20 @@ Commands:
 
 Options:
   --password <password>   The password for an encrypted configuration
-  --no-kiosk              Launch the browser in a window instead of kiosk mode
   --headless              Launch the browser without a display server (testing)
   --chromium <path>       The Chromium executable to be used
   --url <url>             The URL for which the request hashes are to be shown
   --debug                 Enable debug logging
 ```
 
-The configuration may be a file path, an `http(s)` URL or a `data:` URI. The
-`keys` command prints the values an exam administrator needs for the
+The configuration may be a file path, an `http(s)` URL or a `data:` URI.
+The `keys` command prints the values an exam administrator needs for the
 configuration of their LMS.
 
 ## How exams are verified
 
 While an exam configuration is active, the browser behaves like SEB on
-Windows/macOS:
+Windows/macOS for everything the exam system checks:
 
 - **User agent** contains `SEB/<version>`.
 - **Request headers** (main frame and same-host requests):
@@ -90,8 +106,9 @@ Windows/macOS:
   mechanism, so exam systems can verify the client without relying on headers.
 
 The hash values have been cross-checked against the gold vectors of the
-Moodle `quizaccess_seb` plugin and upstream unit tests, and end-to-end against a
-captured HTTP session.
+Moodle `quizaccess_seb` plugin and upstream unit tests, and end-to-end against
+a mock exam server (see `scripts/e2e.sh`), including the values seen in a
+**newly opened tab**.
 
 > **Note:** the Browser Exam Key is bound to the SEB build version, exactly as
 > with upstream. When the version changes, exam administrators must update the
@@ -104,37 +121,33 @@ captured HTTP session.
 src/
   SafeExamBrowser.Linux.Configuration  Configuration file formats, Config Key / BEK
   SafeExamBrowser.Linux.Browser        Chromium control via DevTools Protocol
-  SafeExamBrowser.Linux.Security       Process monitor, VM detection
   SafeExamBrowser.Linux.Client         Session orchestration
-  SafeExamBrowser.Linux.Cli            seb-linux command line interface
+  SafeExamBrowser.Linux.Server         SEB Server (Exam API v1) client
+  SafeExamBrowser.Linux.Cli            exam-unlock command line interface
 tests/
   SafeExamBrowser.Linux.Tests          Unit tests incl. upstream-ported suites
+  e2e/                                 End-to-end harness (mock exam + SEB Server)
 ```
 
 Curious implementation details:
 
-- Request filtering ports the upstream filter semantics (block rules first,
-  block-by-default, automatic allow rule for the start URL).
+- The request interception pipeline still rewrites `seb://`/`sebs://` URLs,
+  handles the quit URL and detects configuration downloads, but it never
+  blocks a request: everything is continued (with the SEB headers appended).
 - Because the renderer is paused while a document request is intercepted, the
   SEB JavaScript API layer for the next document is registered *before* the
   request is continued, using fire-and-forget DevTools commands to avoid a
   deadlock (the renderer does not answer while paused).
+- New tabs and windows are attached automatically, so the SEB JavaScript API
+  and the per-URL key hashes are available there as well.
 - With no display server available (or `SEB_HEADLESS=1`), the browser runs
-  headless — used by the tests and by CI. Kiosk mode is selected from the
-  configuration's window mode.
+  headless — used by the tests and by CI.
 
-## Kiosk & lockdown
+## Running on a VM
 
-SEB locks down the browser, but a safe exam also needs a locked-down session.
-On Linux the recommended setup is a kiosk compositor such as
-[cage](https://github.com/cage-kiosk/cage):
-
-```sh
-cage -- seb-linux run exam.seb
-```
-
-See [docs/kiosk-session.md](docs/kiosk-session.md) for a complete exam-room
-setup (dedicated user, autologin, screen capture, virtual terminals).
+No virtual-machine detection is performed. The client behaves identically on
+QEMU/KVM, VirtualBox, VMware, Hyper-V and any other virtualization platform,
+regardless of the `allowVirtualMachine` setting in the configuration.
 
 ## Configuration compatibility
 
@@ -143,8 +156,8 @@ setup (dedicated user, autologin, screen capture, virtual terminals).
   `seb://` and `sebs://` URL rewriting, configuration download detection.
 - **Not supported:** certificate-encrypted configurations (RSA public key with
   password or certificate hash). Loading such a file reports `NotSupported`.
-- SEB Server mode is recognized but not yet implemented; running a
-  server-based configuration prints a clear error instead of failing silently.
+- SEB Server mode is fully implemented (handshake, app signature key, exam
+  configuration download, pings and instructions).
 
 ## License
 

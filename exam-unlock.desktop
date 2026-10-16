@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=Safe Exam Browser
-GenericName=Secure Exam Session
-Comment=Lock down your workstation for secure online exams
-Exec=seb-linux run %u
+Name=exam-unlock
+GenericName=Safe Exam Browser (unlocked)
+Comment=Runs Safe Exam Browser exams without lockdown
+Exec=exam-unlock run %u
 Terminal=false
 Categories=Education;
 MimeType=application/x-safe-exam-browser;x-scheme-handler/seb;x-scheme-handler/sebs;

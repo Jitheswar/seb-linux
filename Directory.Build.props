@@ -7,9 +7,9 @@
     <Version>0.1.0</Version>
     <!-- The build version is part of the browser exam key and must not change per commit. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    <Authors>Safe Exam Browser (Linux port) contributors</Authors>
-    <Product>Safe Exam Browser</Product>
-    <Description>Safe Exam Browser for Linux - lock down workstations for secure online exams.</Description>
+    <Authors>exam-unlock contributors</Authors>
+    <Product>exam-unlock</Product>
+    <Description>Unlocked Safe Exam Browser for Linux and Windows: runs SEB exams without lockdown, works on virtual machines.</Description>
     <RepositoryType>git</RepositoryType>
     <DebugType>embedded</DebugType>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>

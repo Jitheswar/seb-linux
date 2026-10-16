@@ -57,9 +57,45 @@ PAGE = """<!DOCTYPE html>
     out.subresource = r.status;
   } catch (e) { out.subresourceError = String(e); }
   try {
+    out.openedTab = !!window.open('/tab-page', '_blank');
+  } catch (e) { out.openedTabError = String(e); }
+  out.tabReported = false;
+  for (let i = 0; i < 60 && !out.tabReported; i++) {
+    try { out.tabReported = (await (await fetch('/tab-status', { cache: 'no-store' })).json()).reported; } catch (e) {}
+    if (!out.tabReported) { await new Promise(r => setTimeout(r, 100)); }
+  }
+  try {
+    const a = document.createElement('a');
+    a.href = '/download-file';
+    a.download = 'e2e-download.txt';
+    document.body.appendChild(a);
+    a.click();
+    out.downloadTriggered = true;
+  } catch (e) { out.downloadError = String(e); }
+  await new Promise(r => setTimeout(r, 3000));
+  try {
     await fetch('/report', { method: 'POST', cache: 'no-store', body: JSON.stringify(out) });
   } catch (e) {}
   if (page.quit) { location.href = '/quit'; }
+})();
+</script></body></html>"""
+
+TAB_PAGE = """<!DOCTYPE html>
+<html><head><title>SEB E2E tab</title></head>
+<body><h1>SEB e2e tab</h1>
+<script>
+(async () => {
+  const out = { url: location.href, ua: navigator.userAgent, tab: true };
+  try {
+    out.seb = typeof window.SafeExamBrowser;
+    out.version = window.SafeExamBrowser && window.SafeExamBrowser.version;
+    out.hasUpdateKeys = typeof (window.SafeExamBrowser && window.SafeExamBrowser.security && window.SafeExamBrowser.security.updateKeys);
+    out.configKey = window.SafeExamBrowser && window.SafeExamBrowser.security && window.SafeExamBrowser.security.configKey;
+    out.browserExamKey = window.SafeExamBrowser && window.SafeExamBrowser.security && window.SafeExamBrowser.security.browserExamKey;
+  } catch (e) { out.sebError = String(e); }
+  try {
+    await fetch('/tab-report', { method: 'POST', cache: 'no-store', body: JSON.stringify(out) });
+  } catch (e) {}
 })();
 </script></body></html>"""
 
@@ -106,6 +142,7 @@ class State:
         self.pings = []
         self.deleted = False
         self.report = None
+        self.tab_report = None
         self.header_checks = []
 
 
@@ -187,6 +224,14 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/subresource":
             self._check_page_headers("/subresource")
             self._respond(200, "subresource-ok", "text/plain")
+        elif path == "/tab-page":
+            self._check_page_headers("/tab-page")
+            self._respond(200, TAB_PAGE, "text/html; charset=utf-8")
+        elif path == "/tab-status":
+            with STATE.lock:
+                self._respond_json({"reported": STATE.tab_report is not None})
+        elif path == "/download-file":
+            self._respond(200, "download-ok", "text/plain", headers={"Content-Disposition": 'attachment; filename="e2e-download.txt"'})
         elif path == "/quit":
             self._respond(200, "<html><body>quit</body></html>", "text/html; charset=utf-8")
 
@@ -211,6 +256,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/report":
             self._report()
+        elif path == "/tab-report":
+            self._tab_report()
         elif path == "/oauth/token":
             self._token()
         elif path == "/exam-api/v1/handshake":
@@ -333,6 +380,20 @@ class Handler(BaseHTTPRequestHandler):
 
         self._respond(200, "ok", "text/plain")
 
+    def _tab_report(self):
+        body = self._body()
+
+        try:
+            report = json.loads(body)
+        except ValueError:
+            self._respond(400, '{"error": "invalid json"}')
+            return
+
+        with STATE.lock:
+            STATE.tab_report = report
+
+        self._respond(200, "ok", "text/plain")
+
     def _expect(self):
         try:
             expect = json.loads(self._body())
@@ -378,6 +439,16 @@ class Handler(BaseHTTPRequestHandler):
                 check("the configuration key hash (JavaScript API) matches", page.get("configKey") == sha256_hex(expect["url"] + expect["configKey"]), page.get("configKey"))
                 check("the browser exam key hash (JavaScript API) matches", page.get("browserExamKey") == sha256_hex(expect["url"] + expect["browserExamKey"]), page.get("browserExamKey"))
                 check("subresources are loaded", page.get("subresource") == 200, page.get("subresource"))
+                check("the exam page opened a new tab", page.get("openedTab") is True, page.get("openedTabError", ""))
+                check("the new tab loaded and reported back", page.get("tabReported") is True and STATE.tab_report is not None, page.get("tabReported"))
+                check("the download was triggered", page.get("downloadTriggered") is True, page.get("downloadError", ""))
+
+                tab = STATE.tab_report
+                if tab:
+                    check("the user agent identifies as SEB in the new tab", "SEB" in tab.get("ua", ""), tab.get("ua", ""))
+                    check("the SEB JavaScript API is available in the new tab", tab.get("seb") == "object" and tab.get("hasUpdateKeys") == "function", tab.get("version"))
+                    check("the configuration key hash (new tab) matches", tab.get("configKey") == sha256_hex(expect["url"] + "tab-page" + expect["configKey"]), tab.get("configKey"))
+                    check("the browser exam key hash (new tab) matches", tab.get("browserExamKey") == sha256_hex(expect["url"] + "tab-page" + expect["browserExamKey"]), tab.get("browserExamKey"))
         elif mode == "server":
             handshake = STATE.handshake_post or {}
 
@@ -401,6 +472,16 @@ class Handler(BaseHTTPRequestHandler):
                 check("the user agent identifies as SEB", "SEB" in page.get("ua", ""), page.get("ua", ""))
                 check("the configuration key hash (JavaScript API) matches", page.get("configKey") == sha256_hex(expect["url"] + expect["configKey"]), page.get("configKey"))
                 check("the server browser exam key hash (JavaScript API) matches", page.get("browserExamKey") == sha256_hex(expect["url"] + expect["browserExamKey"]), page.get("browserExamKey"))
+
+                check("the exam page opened a new tab", page.get("openedTab") is True, page.get("openedTabError", ""))
+                check("the new tab loaded and reported back", page.get("tabReported") is True and STATE.tab_report is not None, page.get("tabReported"))
+
+                tab = STATE.tab_report
+                if tab:
+                    check("the user agent identifies as SEB in the new tab", "SEB" in tab.get("ua", ""), tab.get("ua", ""))
+                    check("the SEB JavaScript API is available in the new tab", tab.get("seb") == "object" and tab.get("hasUpdateKeys") == "function", tab.get("version"))
+                    check("the configuration key hash (new tab) matches", tab.get("configKey") == sha256_hex(expect["url"] + "tab-page" + expect["configKey"]), tab.get("configKey"))
+                    check("the browser exam key hash (new tab) matches", tab.get("browserExamKey") == sha256_hex(expect["url"] + "tab-page" + expect["browserExamKey"]), tab.get("browserExamKey"))
 
             check("the connection was closed (DELETE)", STATE.deleted)
 

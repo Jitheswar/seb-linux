@@ -16,9 +16,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 using System.Threading;
 using System.Threading.Tasks;
@@ -59,7 +59,6 @@ namespace SafeExamBrowser.Linux.Browser
 		/// </summary>
 		public string LogFile { get; set; }
 
-
 		/// <summary>
 		/// The logger to be used, or null to use a console logger.
 		/// </summary>
@@ -73,8 +72,6 @@ namespace SafeExamBrowser.Linux.Browser
 	/// </summary>
 	public sealed class BrowserController : IAsyncDisposable
 	{
-		private const string PDF_TOOLBAR_FRAGMENT = "#toolbar=0";
-		private const string PRINT_NOT_ALLOWED_MESSAGE = "Printing is not allowed during the exam.";
 		private const string START_PAGE_FILE_EXTENSION = ".seb";
 		private const string START_PAGE_MIME_TYPE = "application/seb";
 
@@ -107,8 +104,6 @@ namespace SafeExamBrowser.Linux.Browser
 			logger = this.configuration.Logger ?? new ConsoleLogger("Browser", debug: true);
 			keyGenerator = new KeyGenerator(logger);
 		}
-
-
 
 		/// <summary>
 		/// Invoked when the start URL has been loaded successfully.
@@ -155,8 +150,6 @@ namespace SafeExamBrowser.Linux.Browser
 
 			keyGenerator.UseCustomBrowserExamKey(settings.CustomBrowserExamKey);
 
-
-
 			quitUrlPattern = string.IsNullOrWhiteSpace(settings.QuitUrl)
 				? default(Regex)
 				: new Regex($"^{Regex.Escape(settings.QuitUrl.TrimEnd('/'))}/?$", RegexOptions.IgnoreCase);
@@ -169,7 +162,6 @@ namespace SafeExamBrowser.Linux.Browser
 			{
 				ExecutablePath = configuration.ChromiumExecutablePath,
 				ProfileDirectory = profileIsEphemeral ? default(string) : GetPersistentProfileDirectory(),
-
 				LogFile = configuration.LogFile,
 				Settings = settings
 			}, cancellationToken);
@@ -292,7 +284,6 @@ namespace SafeExamBrowser.Linux.Browser
 
 			eventLock.Dispose();
 		}
-
 
 		private async Task InitializeBrowserAsync(CancellationToken cancellationToken)
 		{
@@ -499,7 +490,6 @@ namespace SafeExamBrowser.Linux.Browser
 						state.PageUrl = frame.TryGetProperty("url", out var url) ? url.GetString() : default;
 					}
 
-
 				}
 				catch (Exception e)
 				{
@@ -590,7 +580,6 @@ namespace SafeExamBrowser.Linux.Browser
 			}
 		}
 
-
 		private void HandleDownloadWillBegin(CdpEvent @event)
 		{
 			var guid = @event.Parameters.GetProperty("guid").GetString();
@@ -672,7 +661,6 @@ namespace SafeExamBrowser.Linux.Browser
 			var isDocument = resourceType == "Document";
 			var isMainFrame = isDocument && target != default && frameId == target.RootFrameId;
 
-
 			var rewritten = RewriteSebScheme(url);
 
 			if (isMainFrame && IsQuitUrl(rewritten))
@@ -684,7 +672,6 @@ namespace SafeExamBrowser.Linux.Browser
 				return;
 			}
 
-
 			if (isMainFrame && configuration.Settings.AllowConfigurationDownloads && IsConfigurationFile(rewritten))
 			{
 				logger.Info($"Detected configuration file '{rewritten}', requesting configuration download...");
@@ -693,7 +680,6 @@ namespace SafeExamBrowser.Linux.Browser
 				ConfigurationDownloadRequested?.Invoke(rewritten);
 				return;
 			}
-
 
 			if (isDocument && target != default)
 			{
@@ -718,7 +704,6 @@ namespace SafeExamBrowser.Linux.Browser
 				headers
 			}, sessionId);
 		}
-
 
 		private object[] AppendCustomHeaders(TargetState target, JsonElement request, string url, bool isMainFrame)
 		{
@@ -788,7 +773,6 @@ namespace SafeExamBrowser.Linux.Browser
 
 			script.AppendLine();
 			script.AppendLine($"window.SafeExamBrowser.security.updateKeys = (callback) => callback();");
-
 
 			if (target.LastScript == script.ToString())
 			{
@@ -889,7 +873,6 @@ namespace SafeExamBrowser.Linux.Browser
 		{
 			return quitUrlPattern != default && quitUrlPattern.IsMatch(url);
 		}
-
 
 		/// <summary>
 		/// Determines whether the URL points to a SEB configuration file, either with the .seb file

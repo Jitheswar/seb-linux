@@ -3,7 +3,6 @@
   <ItemGroup>
     <ProjectReference Include="..\SafeExamBrowser.Linux.Configuration\SafeExamBrowser.Linux.Configuration.csproj" />
     <ProjectReference Include="..\SafeExamBrowser.Linux.Browser\SafeExamBrowser.Linux.Browser.csproj" />
-    <ProjectReference Include="..\SafeExamBrowser.Linux.Security\SafeExamBrowser.Linux.Security.csproj" />
     <ProjectReference Include="..\SafeExamBrowser.Linux.Server\SafeExamBrowser.Linux.Server.csproj" />
   </ItemGroup>
 

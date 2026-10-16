@@ -62,7 +62,6 @@ namespace SafeExamBrowser.Linux.Tests
 				"run", "config.seb",
 				"--password", "secret",
 				"--chromium", "/usr/bin/chromium",
-				"--no-kiosk",
 				"--headless",
 				"--debug"
 			});
@@ -72,7 +71,6 @@ namespace SafeExamBrowser.Linux.Tests
 			Assert.Equal("config.seb", options.Configuration);
 			Assert.Equal("secret", options.Password);
 			Assert.Equal("/usr/bin/chromium", options.Chromium);
-			Assert.True(options.NoKiosk);
 			Assert.True(options.Headless);
 			Assert.True(options.Debug);
 		}

@@ -25,54 +25,5 @@ namespace SafeExamBrowser.Linux.Tests.Browser
 			Assert.DoesNotContain("%%_", js);
 		}
 
-		[Fact]
-		public void LoadBlockedContent_MustReplaceMessage()
-		{
-			var html = sut.LoadBlockedContent("blocked!");
-
-			Assert.Contains("blocked!", html);
-			Assert.DoesNotContain("%%MESSAGE%%", html);
-		}
-
-		[Fact]
-		public void LoadBlockedPage_MustReplaceAllPlaceholders()
-		{
-			var html = sut.LoadBlockedPage("title", "message", "back");
-
-			Assert.Contains("<title>title</title>", html);
-			Assert.Contains("message", html);
-			Assert.Contains("back", html);
-			Assert.DoesNotContain("%%", html);
-		}
-
-		[Fact]
-		public void LoadIsolatedClipboard_MustProvideClipboardApi()
-		{
-			var js = sut.LoadIsolatedClipboard();
-
-			Assert.Contains("SafeExamBrowser.clipboard", js);
-			Assert.Contains("copy", js);
-			Assert.Contains("paste", js);
-			Assert.Contains("cut", js);
-		}
-
-		[Fact]
-		public void LoadBlockClipboard_MustPreventDefault()
-		{
-			var js = sut.LoadBlockClipboard();
-
-			Assert.Contains("preventDefault", js);
-			Assert.Contains("'copy'", js);
-			Assert.Contains("'paste'", js);
-		}
-
-		[Fact]
-		public void LoadPageZoom_MustDisableZoom()
-		{
-			var js = sut.LoadPageZoom();
-
-			Assert.Contains("wheel", js);
-			Assert.Contains("preventDefault", js);
-		}
 	}
 }

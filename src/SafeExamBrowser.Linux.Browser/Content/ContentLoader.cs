@@ -19,9 +19,6 @@ namespace SafeExamBrowser.Linux.Browser.Content
 	internal class ContentLoader
 	{
 		private string api;
-		private string blockClipboard;
-		private string isolatedClipboard;
-		private string pageZoom;
 
 		internal string LoadApi(string browserExamKey, string configurationKey, string version)
 		{
@@ -37,52 +34,6 @@ namespace SafeExamBrowser.Linux.Browser.Content
 			js = js.Replace("%%_VERSION_%%", version);
 
 			return js;
-		}
-
-		internal string LoadBlockClipboard()
-		{
-			if (blockClipboard == default)
-			{
-				blockClipboard = ReadResource("BlockClipboard.js");
-			}
-
-			return blockClipboard;
-		}
-
-		internal string LoadBlockedContent(string message)
-		{
-			return ReadResource("BlockedContent.html").Replace("%%MESSAGE%%", message);
-		}
-
-		internal string LoadBlockedPage(string title, string message, string backButton)
-		{
-			var html = ReadResource("BlockedPage.html");
-
-			html = html.Replace("%%BACK_BUTTON%%", backButton);
-			html = html.Replace("%%MESSAGE%%", message);
-			html = html.Replace("%%TITLE%%", title);
-
-			return html;
-		}
-
-		internal string LoadIsolatedClipboard()
-		{
-			if (isolatedClipboard == default)
-			{
-				isolatedClipboard = ReadResource("IsolatedClipboard.js");
-			}
-
-			return isolatedClipboard;
-		}
-
-		internal string LoadPageZoom()
-		{
-			if (pageZoom == default)
-			{
-				pageZoom = ReadResource("PageZoom.js");
-			}
-
-			return pageZoom;
 		}
 
 		private string ReadResource(string name)

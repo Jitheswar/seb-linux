@@ -11,14 +11,12 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using SafeExamBrowser.Linux.Browser;
 using SafeExamBrowser.Linux.Configuration.Contracts;
 using SafeExamBrowser.Linux.Configuration.Settings;
-using SafeExamBrowser.Linux.Security;
 using SafeExamBrowser.Linux.Server;
 
 namespace SafeExamBrowser.Linux.Client
@@ -50,11 +48,6 @@ namespace SafeExamBrowser.Linux.Client
 		/// The directory for downloads, or null to use the configuration or the default directory.
 		/// </summary>
 		public string DownloadDirectory { get; set; }
-
-		/// <summary>
-		/// Determines whether the browser is to be launched in kiosk mode, or null to use the window mode of the configuration.
-		/// </summary>
-		public bool? KioskMode { get; set; }
 
 		/// <summary>
 		/// The logger to be used, or null to use a console logger.
@@ -104,34 +97,12 @@ namespace SafeExamBrowser.Linux.Client
 		/// </summary>
 		public async Task<ExamSessionEndReason> RunAsync(CancellationToken cancellationToken = default)
 		{
-			var environmentProblem = ValidateEnvironment(settings);
-
-			if (environmentProblem != default)
-			{
-				throw new InvalidOperationException(environmentProblem);
-			}
-
 			if (settings.ConfigurationFile.SessionMode == SessionMode.Server)
 			{
 				return await RunServerSessionAsync(cancellationToken);
 			}
 
 			return await RunBrowserSessionAsync(cancellationToken);
-		}
-
-		/// <summary>
-		/// Validates the environment in which the exam session is to be run: virtual machines
-		/// are rejected unless the configuration allows them (see Security.AllowVirtualMachine).
-		/// Returns null if the environment is valid, otherwise a description of the problem.
-		/// </summary>
-		public static string ValidateEnvironment(AppSettings settings)
-		{
-			if (settings != default && !settings.Security.AllowVirtualMachine && VirtualMachineDetector.IsVirtualMachine())
-			{
-				return "This exam is not allowed to be run inside a virtual machine!";
-			}
-
-			return default;
 		}
 
 		/// <summary>
@@ -414,29 +385,24 @@ namespace SafeExamBrowser.Linux.Client
 
 						logger.Info($"Exam session is running, start URL: '{settings.Browser.StartUrl}'.");
 
-						using (var monitor = CreateProcessMonitor())
+						var completed = await Task.WhenAny(terminationRequested.Task, resetRequested.Task, browserExited.Task);
+
+						if (completed == resetRequested.Task)
 						{
-							monitor?.Start();
-
-							var completed = await Task.WhenAny(terminationRequested.Task, resetRequested.Task, browserExited.Task);
-
-							if (completed == resetRequested.Task)
-							{
-								logger.Info("The session is being reset, the browser will be restarted with a clean session.");
-								continue;
-							}
-
-							if (completed == browserExited.Task)
-							{
-								logger.Warn("The browser process has exited unexpectedly!");
-
-								return ExamSessionEndReason.BrowserExited;
-							}
-
-							logger.Info("Termination requested, shutting down the exam session...");
-
-							return ExamSessionEndReason.Terminated;
+							logger.Info("The session is being reset, the browser will be restarted with a clean session.");
+							continue;
 						}
+
+						if (completed == browserExited.Task)
+						{
+							logger.Warn("The browser process has exited unexpectedly!");
+
+							return ExamSessionEndReason.BrowserExited;
+						}
+
+						logger.Info("Termination requested, shutting down the exam session...");
+
+						return ExamSessionEndReason.Terminated;
 					}
 				}
 			}
@@ -447,8 +413,6 @@ namespace SafeExamBrowser.Linux.Client
 			var controller = new BrowserController(new BrowserConfiguration
 			{
 				Settings = settings.Browser,
-				Security = settings.Security,
-				KioskMode = options.KioskMode,
 				ChromiumExecutablePath = options.ChromiumExecutablePath,
 				DownloadDirectory = options.DownloadDirectory,
 				ProfileDirectory = options.ProfileDirectory,
@@ -475,36 +439,10 @@ namespace SafeExamBrowser.Linux.Client
 			};
 
 			controller.DownloadCompleted += (url, fileName, filePath) => logger.Info($"Download completed: '{fileName}' -> '{filePath}'.");
-			controller.RequestBlocked += url => logger.Warn($"Blocked request for '{url}'.");
 
 			_ = controller.WaitForExitAsync().ContinueWith(task => browserExited.TrySetResult(true), TaskContinuationOptions.OnlyOnRanToCompletion);
 
 			return controller;
-		}
-
-		private ProcessMonitor CreateProcessMonitor()
-		{
-			var policy = new ProcessPolicy(settings.Applications);
-
-			if (!policy.HasRules)
-			{
-				return default;
-			}
-
-			var monitor = new ProcessMonitor(policy, logger);
-
-			// The browser and the client itself must never be terminated by the monitor.
-			monitor.Ignore("chrome");
-			monitor.Ignore("chromium");
-			monitor.Ignore("chromium-browser");
-			monitor.Ignore(Process.GetCurrentProcess().ProcessName);
-			monitor.Ignore("seb-linux");
-
-			monitor.ProcessDetected += process => logger.Warn($"Blocked application '{process.Name}' ({process.ProcessId}) is running!");
-
-			logger.Info($"Process monitor activated with {settings.Applications.Whitelist.Count + settings.Applications.Blacklist.Count} configured application(s).");
-
-			return monitor;
 		}
 
 		private bool VerifyQuitPassword()

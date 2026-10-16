@@ -30,17 +30,16 @@ namespace SafeExamBrowser.Linux.Cli
 		public string Configuration { get; set; }
 		public bool Debug { get; set; }
 		public bool Headless { get; set; }
-		public bool NoKiosk { get; set; }
 		public string Password { get; set; }
 		public string Url { get; set; }
 	}
 
 	public static class CommandLine
 	{
-		public const string Usage = @"Safe Exam Browser for Linux
+		public const string Usage = @"Exam Unlock (Safe Exam Browser)
 
 Usage:
-  seb-linux <command> <configuration> [options]
+  exam-unlock <command> <configuration> [options]
 
 Commands:
   run     Start an exam session with the given configuration
@@ -55,7 +54,6 @@ SEB configuration file (.seb).
 
 Options:
   --password <password>   The password for an encrypted configuration
-  --no-kiosk              Launch the browser in a window instead of kiosk mode
   --headless              Launch the browser without a display server (testing)
   --chromium <path>       The Chromium executable to be used
   --url <url>             The URL for which the request hashes are to be shown
@@ -136,9 +134,6 @@ Exit codes:
 						}
 
 						options.Chromium = chromium;
-						break;
-					case "--no-kiosk":
-						options.NoKiosk = true;
 						break;
 					case "--headless":
 						options.Headless = true;

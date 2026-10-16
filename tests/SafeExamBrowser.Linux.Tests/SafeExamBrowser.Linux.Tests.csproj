@@ -25,7 +25,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\SafeExamBrowser.Linux.Configuration\SafeExamBrowser.Linux.Configuration.csproj" />
     <ProjectReference Include="..\..\src\SafeExamBrowser.Linux.Browser\SafeExamBrowser.Linux.Browser.csproj" />
-    <ProjectReference Include="..\..\src\SafeExamBrowser.Linux.Security\SafeExamBrowser.Linux.Security.csproj" />
     <ProjectReference Include="..\..\src\SafeExamBrowser.Linux.Client\SafeExamBrowser.Linux.Client.csproj" />
     <ProjectReference Include="..\..\src\SafeExamBrowser.Linux.Server\SafeExamBrowser.Linux.Server.csproj" />
     <ProjectReference Include="..\..\src\SafeExamBrowser.Linux.Cli\SafeExamBrowser.Linux.Cli.csproj" />

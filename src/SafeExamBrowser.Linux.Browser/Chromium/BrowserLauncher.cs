@@ -41,11 +41,6 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 		public string UserAgent { get; set; }
 
 		/// <summary>
-		/// Determines whether the browser is to be launched in fullscreen kiosk mode.
-		/// </summary>
-		public bool KioskMode { get; set; }
-
-		/// <summary>
 		/// The file to which the browser output is to be logged, or null to discard it.
 		/// </summary>
 		public string LogFile { get; set; }
@@ -269,10 +264,6 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 				arguments.Add("--headless=new");
 				arguments.Add("--window-size=1280,800");
 			}
-			else if (settings.MainWindow?.WindowMode == WindowMode.Fullscreen || options.KioskMode)
-			{
-				arguments.Add("--kiosk");
-			}
 			else
 			{
 				arguments.Add("--app=about:blank");
@@ -280,16 +271,6 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 			}
 
 			arguments.Add("--touch-events=enabled");
-
-			if (!settings.AllowPageZoom)
-			{
-				arguments.Add("--disable-pinch");
-			}
-
-			if (!settings.AllowPdfReader)
-			{
-				arguments.Add("--disable-pdf-extension");
-			}
 
 			if (!settings.AllowSpellChecking)
 			{

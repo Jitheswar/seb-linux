@@ -130,15 +130,6 @@ namespace SafeExamBrowser.Linux.Cli
 				return EXIT_CONFIGURATION;
 			}
 
-			problem = ExamSession.ValidateEnvironment(result.Settings);
-
-			if (problem != default)
-			{
-				Console.Error.WriteLine(problem);
-
-				return EXIT_CONFIGURATION;
-			}
-
 			using (var cancellation = new CancellationTokenSource())
 			{
 				Console.CancelKeyPress += (sender, eventArgs) =>
@@ -150,7 +141,6 @@ namespace SafeExamBrowser.Linux.Cli
 				var session = new ExamSession(result.Settings, new ExamSessionOptions
 				{
 					ChromiumExecutablePath = options.Chromium,
-					KioskMode = options.NoKiosk ? false : default(bool?),
 					Logger = logger,
 					QuitPasswordPrompt = () => Prompt("Quit password: ")
 				});
@@ -165,7 +155,7 @@ namespace SafeExamBrowser.Linux.Cli
 
 		private static ILogger CreateLogger(CommandLineOptions options)
 		{
-			return new ConsoleLogger("seb-linux", options.Debug);
+			return new ConsoleLogger("exam-unlock", options.Debug);
 		}
 
 		private static string Describe(LoadStatus status, CommandLineOptions options)

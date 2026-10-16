@@ -12,6 +12,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Runtime.InteropServices;
 
 namespace SafeExamBrowser.Linux.Browser.Chromium
 {
@@ -36,6 +37,14 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 			"/snap/bin",
 			"/opt/google/chrome",
 			"/var/lib/flatpak/exports/bin"
+		};
+
+		// Windows installation layout, relative to PROGRAMFILES / PROGRAMFILES(X86) / LOCALAPPDATA.
+		private static readonly string[] WINDOWS_INSTALLATION_PATHS =
+		{
+			"Google\\Chrome\\Application\\chrome.exe",
+			"Chromium\\Application\\chrome.exe",
+			"BraveSoftware\\Brave-Browser\\Application\\brave.exe"
 		};
 
 		/// <summary>
@@ -74,6 +83,33 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 					if (File.Exists(path))
 					{
 						return path;
+					}
+				}
+			}
+
+
+			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+			{
+				foreach (var root in new[]
+					{
+						Environment.GetEnvironmentVariable("PROGRAMFILES"),
+						Environment.GetEnvironmentVariable("PROGRAMFILES(X86)"),
+						Environment.GetEnvironmentVariable("LOCALAPPDATA")
+					})
+				{
+					if (string.IsNullOrWhiteSpace(root))
+					{
+						continue;
+					}
+
+					foreach (var relative in WINDOWS_INSTALLATION_PATHS)
+					{
+						var path = Path.Combine(root, relative);
+
+						if (File.Exists(path))
+						{
+							return path;
+						}
 					}
 				}
 			}
@@ -140,6 +176,16 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 					if (File.Exists(candidate))
 					{
 						return candidate;
+					}
+
+					if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+					{
+						candidate = Path.Combine(directory.Trim(), name + ".exe");
+
+						if (File.Exists(candidate))
+						{
+							return candidate;
+						}
 					}
 				}
 				catch (ArgumentException)

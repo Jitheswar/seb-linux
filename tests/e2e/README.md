@@ -16,10 +16,12 @@ through two scenarios:
    Chrome blocks `window.open()` without a user gesture) and verified to load
    with its own per-URL key hashes and the SEB JavaScript API — **downloads a
    file** (verified on disk) and terminates via the quit URL. The mock server
-   verifies the headers, the user agent and the SEB JavaScript API values in
-   the main frame and in the new tab. The client log is checked to prove the
-   browser was **not** launched in kiosk mode, and the whole run works in a
-   virtual machine (VM detection is gone).
+   the main frame and in the new tab — the SEB request headers are verified
+   on **every** recorded request, including the first document request of the
+   new tab (the login-loop regression: an unsigned first request makes an LMS
+   bounce the tab back to its login page). The client log is checked to prove
+   the browser was **not** launched in kiosk mode, and the whole run works in
+   a virtual machine (VM detection is gone).
 2. **server** (`server-mode.seb`): the client connects to the mock SEB Server
    (`exam-api/discovery`, OAuth2 token, handshake with exam selection, app
    signature key exchange, exam configuration download, pings with

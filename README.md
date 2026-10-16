@@ -34,7 +34,11 @@ It is written in C#/.NET 8 with **zero NuGet dependencies** in `src/`.
 
 ## Quick start
 
-Requirements: .NET 8 SDK (build) and Chromium or Google Chrome (runtime).
+Requirements: .NET 8 SDK (build) and Chromium or Google Chrome, **version 90
+or newer** (runtime). The client detects the browser from `SEB_CHROMIUM`,
+`PATH` and the common installation locations (including Chrome for Testing
+under `~/.chromium`, installed with
+`npx @puppeteer/browsers install chrome@stable --path ~/.chromium`).
 
 ```sh
 dotnet build
@@ -49,14 +53,26 @@ dotnet run --project src/SafeExamBrowser.Linux.Cli -- keys  exam.seb --url https
 dotnet run --project src/SafeExamBrowser.Linux.Cli -- run exam.seb
 ```
 
-Build binaries for both platforms (self-contained, no .NET runtime needed on
-the target machine):
+Build binaries for both platforms and package the release artifacts
+(self-contained, no .NET runtime needed on the target machine):
 
 ```sh
 scripts/build.sh
-# -> artifacts/exam-unlock-linux-x64/exam-unlock
-# -> artifacts/exam-unlock-win-x64/exam-unlock.exe
+# publish output:
+#   artifacts/exam-unlock-linux-x64/exam-unlock
+#   artifacts/exam-unlock-win-x64/exam-unlock.exe
+# release artifacts (in artifacts/release/):
+#   exam-unlock-<version>-linux-x64.tar.gz      generic Linux x64
+#   exam-unlock-<version>-arch-linux-x64.tar.gz Arch Linux
+#   exam-unlock-<version>-fedora-x64.tar.gz     Fedora
+#   exam-unlock-<version>-debian-x64.tar.gz     Debian
+#   exam-unlock-<version>-win-x64.zip           Windows x64
 ```
+
+The Linux payload is one self-contained .NET 8 `linux-x64` build; it runs on
+all four distros (the .NET 8 SDK does not provide per-distro RIDs). A
+glibc >= 2.23 is required, which current Arch, Fedora, Debian and Ubuntu
+releases all provide.
 
 Install for the current user (Linux): `./scripts/install.sh`
 (binary: `~/.local/bin/exam-unlock`).
@@ -139,7 +155,15 @@ Curious implementation details:
   request is continued, using fire-and-forget DevTools commands to avoid a
   deadlock (the renderer does not answer while paused).
 - New tabs and windows are attached automatically, so the SEB JavaScript API
-  and the per-URL key hashes are available there as well.
+  and the per-URL key hashes are available there as well. Chrome is asked to
+  hold the first document of every new page target (`waitForDebuggerOnStart`)
+  until request interception is enabled for its session and the document is
+  released, so the **first request of a new tab is always signed** — a race
+  that otherwise lets an unsigned request slip through and sends LMS login
+  checks into a redirect loop.
+- The browser is started without `DBUS_SESSION_BUS_ADDRESS` /
+  `DBUS_SYSTEM_BUS_ADDRESS`: a stale D-Bus socket can outlive its daemon and
+  then hang every network request Chrome makes.
 - With no display server available (or `SEB_HEADLESS=1`), the browser runs
   headless — used by the tests and by CI.
 

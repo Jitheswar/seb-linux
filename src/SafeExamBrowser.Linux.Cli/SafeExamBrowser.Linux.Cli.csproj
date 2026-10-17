@@ -12,9 +12,15 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
-    <AssemblyName>exam-unlock</AssemblyName>
+    <AssemblyName>SafeExamBrowser</AssemblyName>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <!-- The Windows build is a GUI application (no console window): the browser is
+       the user interface, exactly like the upstream client. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+    <OutputType>WinExe</OutputType>
   </PropertyGroup>
 
 </Project>

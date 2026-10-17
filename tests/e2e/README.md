@@ -7,7 +7,7 @@ scripts/e2e.sh
 ```
 
 The harness starts a mock server (`server.py`) which serves both an exam page
-and a mock SEB Server (Exam API v1) and drives the built `exam-unlock` CLI
+and a mock SEB Server (Exam API v1) and drives the built `SafeExamBrowser` CLI
 through two scenarios:
 
 1. **normal** (`normal.seb`): the client loads the exam page, sends the SEB

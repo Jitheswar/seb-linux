@@ -1,4 +1,4 @@
-# exam-unlock
+# Safe Exam Browser
 
 An **unlocked** Safe Exam Browser for **Linux and Windows**. It runs real
 online exams exactly the way SEB does — it loads genuine `.seb`
@@ -17,7 +17,7 @@ It is written in C#/.NET 8 with **zero NuGet dependencies** in `src/`.
 
 ## What is and is not locked
 
-| Area | SEB | exam-unlock |
+| Area | SEB | this client |
 | --- | --- | --- |
 | Config Key / Browser Exam Key request headers | ✅ | ✅ kept |
 | SEB user agent (`SEB/<version>`) | ✅ | ✅ kept |
@@ -59,14 +59,14 @@ Build binaries for both platforms and package the release artifacts
 ```sh
 scripts/build.sh
 # publish output:
-#   artifacts/exam-unlock-linux-x64/exam-unlock
-#   artifacts/exam-unlock-win-x64/exam-unlock.exe
+#   artifacts/SafeExamBrowser-linux-x64/SafeExamBrowser
+#   artifacts/SafeExamBrowser-win-x64/SafeExamBrowser.exe
 # release artifacts (in artifacts/release/):
-#   exam-unlock-<version>-linux-x64.tar.gz      generic Linux x64
-#   exam-unlock-<version>-arch-linux-x64.tar.gz Arch Linux
-#   exam-unlock-<version>-fedora-x64.tar.gz     Fedora
-#   exam-unlock-<version>-debian-x64.tar.gz     Debian
-#   exam-unlock-<version>-win-x64.zip           Windows x64
+#   SafeExamBrowser-<version>-linux-x64.tar.gz      generic Linux x64
+#   SafeExamBrowser-<version>-arch-linux-x64.tar.gz Arch Linux
+#   SafeExamBrowser-<version>-fedora-x64.tar.gz     Fedora
+#   SafeExamBrowser-<version>-debian-x64.tar.gz     Debian
+#   SafeExamBrowser-<version>-win-x64.zip           Windows x64
 ```
 
 The Linux payload is one self-contained .NET 8 `linux-x64` build; it runs on
@@ -75,12 +75,12 @@ glibc >= 2.23 is required, which current Arch, Fedora, Debian and Ubuntu
 releases all provide.
 
 Install for the current user (Linux): `./scripts/install.sh`
-(binary: `~/.local/bin/exam-unlock`).
+(binary: `~/.local/bin/SafeExamBrowser`).
 
 ### CLI
 
 ```
-exam-unlock <command> <configuration> [options]
+SafeExamBrowser <command> <configuration> [options]
 
 Commands:
   run     Start an exam session with the given configuration
@@ -106,8 +106,8 @@ configuration of their LMS.
 
 | Code | Meaning |
 | --- | --- |
-| 0 | Success (including a normal session end via the quit URL) |
-| 1 | Usage error (unknown command or invalid option) |
+| 0 | Success (including a normal session end via the quit URL or a termination signal) |
+| 1 | Usage error (unknown option or unexpected argument) |
 | 2 | Configuration error (missing/invalid configuration, failed validation) |
 | 3 | Runtime error (browser process died unexpectedly, session failure) |
 
@@ -148,7 +148,7 @@ src/
   SafeExamBrowser.Linux.Browser        Chromium control via DevTools Protocol
   SafeExamBrowser.Linux.Client         Session orchestration
   SafeExamBrowser.Linux.Server         SEB Server (Exam API v1) client
-  SafeExamBrowser.Linux.Cli            exam-unlock command line interface
+  SafeExamBrowser.Linux.Cli            SafeExamBrowser command line interface
 tests/
   SafeExamBrowser.Linux.Tests          Unit tests incl. upstream-ported suites
   e2e/                                 End-to-end harness (mock exam + SEB Server)

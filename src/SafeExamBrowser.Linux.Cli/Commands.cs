@@ -131,14 +131,13 @@ namespace SafeExamBrowser.Linux.Cli
 			}
 
 			using (var cancellation = new CancellationTokenSource())
+			using (SignalHandling.Register(() =>
 			{
-				Console.CancelKeyPress += (_, args) =>
-				{
-					args.Cancel = true;
-					logger.Info("Termination requested.");
+				logger.Info("Termination requested via signal.");
 
-					cancellation.Cancel();
-				};
+				cancellation.Cancel();
+			}))
+			{
 				var session = new ExamSession(result.Settings, new ExamSessionOptions
 				{
 					ChromiumExecutablePath = options.Chromium,
@@ -159,7 +158,7 @@ namespace SafeExamBrowser.Linux.Cli
 
 		private static ILogger CreateLogger(CommandLineOptions options)
 		{
-			return new ConsoleLogger("exam-unlock", options.Debug);
+			return new ConsoleLogger("SafeExamBrowser", options.Debug);
 		}
 
 		private static string Describe(LoadStatus status, CommandLineOptions options)

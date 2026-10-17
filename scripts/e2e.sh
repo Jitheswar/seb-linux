@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 #
-# End-to-end tests for exam-unlock (see tests/e2e/README.md).
+# End-to-end tests for Safe Exam Browser (see tests/e2e/README.md).
 #
 # Scenario "normal":
-#   exam-unlock run <normal.seb>: loads the exam page, sends the SEB request
+#   SafeExamBrowser run <normal.seb>: loads the exam page, sends the SEB request
 #   headers (config key hash, request hash), opens a new tab (with its own
 #   per-URL key hashes and the SEB JavaScript API), downloads a file and
 #   terminates via the quit URL. The browser runs in a normal window (no
 #   kiosk mode) and the session works on virtual machines.
 #
 # Scenario "server":
-#   exam-unlock run <server-mode.seb>: connects to the mock SEB Server, performs
+#   SafeExamBrowser run <server-mode.seb>: connects to the mock SEB Server, performs
 #   the handshake, exchanges an app signature key (verified with the JCE reference
 #   implementation of the server), downloads the exam configuration, runs the exam
 #   and is terminated by a SEB_QUIT instruction.
@@ -31,8 +31,8 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 E2E="$ROOT/tests/e2e"
 PORT="${SEB_E2E_PORT:-8765}"
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/exam-unlock-e2e.XXXXXX")"
-CLI="${SEB_E2E_CLI:-$ROOT/src/SafeExamBrowser.Linux.Cli/bin/Debug/net8.0/exam-unlock}"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/SafeExamBrowser-e2e.XXXXXX")"
+CLI="${SEB_E2E_CLI:-$ROOT/src/SafeExamBrowser.Linux.Cli/bin/Debug/net8.0/SafeExamBrowser}"
 
 # The .NET SDK may be installed in a non-standard location (e.g. ~/.dotnet).
 # The apphost finds the runtime via DOTNET_ROOT.
@@ -129,7 +129,10 @@ fi
 
 # Headless Chrome blocks window.open() without a real user gesture, so the new-tab
 # part of the test needs a CDP-level mouse click from a parallel driver (node).
-if command -v node > /dev/null 2>&1; then
+if [ "${SEB_E2E_NO_TAB_TEST:-}" = "true" ]; then
+	NO_TAB_TEST=true
+	echo "  (new-tab test disabled via SEB_E2E_NO_TAB_TEST)"
+elif command -v node > /dev/null 2>&1; then
 	NO_TAB_TEST=false
 else
 	NO_TAB_TEST=true

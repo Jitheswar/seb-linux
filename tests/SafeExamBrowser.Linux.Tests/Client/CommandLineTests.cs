@@ -98,12 +98,13 @@ namespace SafeExamBrowser.Linux.Tests
 		}
 
 		[Fact]
-		public void MustRejectUnknownCommand()
+		public void MustRejectSecondConfigurationArgument()
 		{
-			var (_, error) = CommandLine.Parse(new[] { "frobnicate", "config.seb" });
+			var (options, error) = CommandLine.Parse(new[] { "frobnicate", "config.seb" });
 
 			Assert.NotNull(error);
-			Assert.Contains("frobnicate", error);
+			Assert.Equal("frobnicate", options.Configuration);
+			Assert.Contains("config.seb", error);
 		}
 
 		[Fact]

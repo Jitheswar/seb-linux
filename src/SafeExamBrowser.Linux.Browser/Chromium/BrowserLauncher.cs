@@ -87,11 +87,11 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 			if (majorVersion > 0 && majorVersion < 90)
 			{
 				throw new InvalidOperationException($"The Chromium-based browser '{executable}' (version {majorVersion}) is too old: " +
-					"exam-unlock requires Chromium 90 or newer (headless mode and CDP request interception). " +
+					"Safe Exam Browser requires Chromium 90 or newer (headless mode and CDP request interception). " +
 					"Install a current Chromium or Google Chrome, or point the SEB_CHROMIUM environment variable at one.");
 			}
 
-			var profileDirectory = options.ProfileDirectory ?? Path.Combine(Path.GetTempPath(), $"exam-unlock-{Guid.NewGuid():N}");
+			var profileDirectory = options.ProfileDirectory ?? Path.Combine(Path.GetTempPath(), $"SafeExamBrowser-{Guid.NewGuid():N}");
 			var userAgent = options.UserAgent ?? BuildUserAgent(executable, options.Settings);
 			var arguments = BuildArguments(options, profileDirectory, userAgent);
 
@@ -152,8 +152,9 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 		}
 
 		/// <summary>
-		/// Builds the user agent in the same way as the Windows version:
-		/// "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/&lt;version&gt; SEB/&lt;version&gt;".
+		/// Builds the user agent in the same way as the Windows version
+		/// ("Mozilla/5.0 (Windows NT &lt;version&gt;) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/&lt;version&gt; SEB/&lt;version&gt;"),
+		/// with the platform token matching the operating system the client runs on.
 		/// </summary>
 		internal static string BuildUserAgent(string executable, BrowserSettings settings)
 		{
@@ -167,7 +168,11 @@ namespace SafeExamBrowser.Linux.Browser.Chromium
 			}
 			else
 			{
-				userAgent = $"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chromiumVersion} {sebVersion}";
+				var platform = OperatingSystem.IsWindows()
+					? $"Windows NT {Environment.OSVersion.Version.Major}.{Environment.OSVersion.Version.Minor}"
+					: "X11; Linux x86_64";
+
+				userAgent = $"Mozilla/5.0 ({platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chromiumVersion} {sebVersion}";
 			}
 
 			if (!string.IsNullOrWhiteSpace(settings?.UserAgentSuffix))

@@ -2,7 +2,7 @@
  * Copyright (c) 2026 ETH Zürich, IT Services
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  *
  * Ported from Safe Exam Browser (seb-win-refactoring) for the Linux port.
@@ -13,7 +13,7 @@
  */
 
 SafeExamBrowser = {
-    version: 'SEB_Linux_%%_VERSION_%%',
+    version: '%%_VERSION_%%',
     security: {
         browserExamKey: '%%_BEK_%%',
         configKey: '%%_CK_%%',

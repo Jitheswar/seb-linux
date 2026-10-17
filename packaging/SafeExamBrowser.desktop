@@ -1,11 +1,11 @@
 [Desktop Entry]
 Type=Application
-Name=exam-unlock
-GenericName=Safe Exam Browser (unlocked)
-Comment=Runs Safe Exam Browser exams without lockdown
-Exec=exam-unlock run %u
+Name=Safe Exam Browser
+GenericName=Web Browser
+Comment=Safe Exam Browser
+Exec=SafeExamBrowser run %u
 Terminal=false
 Categories=Education;
 MimeType=application/x-safe-exam-browser;x-scheme-handler/seb;x-scheme-handler/sebs;
-Keywords=exam;quiz;moodle;lockdown;
+Keywords=exam;quiz;moodle;
 StartupNotify=false

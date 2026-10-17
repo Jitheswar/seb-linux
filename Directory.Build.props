@@ -4,12 +4,17 @@
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
-    <Version>0.1.0</Version>
-    <!-- The build version is part of the browser exam key and must not change per commit. -->
-    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    <Authors>exam-unlock contributors</Authors>
-    <Product>exam-unlock</Product>
-    <Description>Unlocked Safe Exam Browser for Linux and Windows: runs SEB exams without lockdown, works on virtual machines.</Description>
+    <!-- The build version is part of the browser exam key and the SEB user agent /
+         JavaScript API version and must not change per commit. -->
+    <Version>3.10.2</Version>
+    <FileVersion>3.10.2.920</FileVersion>
+    <AssemblyVersion>3.10.2.0</AssemblyVersion>
+    <Authors>ETH Zürich, IT Services</Authors>
+    <Company>ETH Zürich, IT Services</Company>
+    <Product>Safe Exam Browser</Product>
+    <AssemblyTitle>Safe Exam Browser</AssemblyTitle>
+    <FileDescription>Safe Exam Browser</FileDescription>
+    <Description>Safe Exam Browser</Description>
     <RepositoryType>git</RepositoryType>
     <DebugType>embedded</DebugType>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>

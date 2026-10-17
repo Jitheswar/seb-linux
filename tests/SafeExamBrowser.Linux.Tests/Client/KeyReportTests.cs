@@ -22,7 +22,7 @@ namespace SafeExamBrowser.Linux.Tests
 		private static readonly string TestData = Path.Combine(AppContext.BaseDirectory, "testdata");
 
 		private const string ExpectedConfigurationKey = "4fa9af8ec8759eb7c680752ef4ee5eaf1a860628608fccae2715d519849f9292";
-		private const string ExpectedBrowserExamKey = "d57306133383cf27675bde29241d215c8adf3a98d32175236897a5c435984ff2";
+	private const string ExpectedBrowserExamKey = "6d795265944983f59faf81f571df5d6f3dcb4c38c80719adf0401027bab36c3a";
 
 		private readonly ILogger logger = new ConsoleLogger("tests", false);
 

@@ -777,7 +777,7 @@ namespace SafeExamBrowser.Linux.Browser
 			var configurationKey = keyGenerator.CalculateConfigurationKeyHash(settings.ConfigurationKey, url);
 			var script = new StringBuilder();
 
-			script.Append(contentLoader.LoadApi(browserExamKey, configurationKey, AppInfo.ProgramBuildVersion));
+			script.Append(contentLoader.LoadApi(browserExamKey, configurationKey, AppInfo.VersionIdentity));
 
 			script.AppendLine();
 			script.AppendLine($"window.SafeExamBrowser.security.updateKeys = (callback) => callback();");

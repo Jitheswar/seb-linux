@@ -1,6 +1,6 @@
 # Session behavior
 
-`exam-unlock` launches the system Chromium-based browser in a **normal
+`SafeExamBrowser` launches the system Chromium-based browser in a **normal
 window**. There is no kiosk mode and no session-level lock:
 
 - New tabs and windows can be opened and switched at any time; the SEB

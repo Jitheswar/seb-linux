@@ -37,7 +37,7 @@ namespace SafeExamBrowser.Linux.Cli
 						Console.WriteLine(CommandLine.Usage);
 						return Commands.EXIT_SUCCESS;
 					case CommandName.Version:
-						Console.WriteLine($"exam-unlock {AppInfo.ProgramBuildVersion} (Safe Exam Browser, unlocked)");
+					Console.WriteLine($"Safe Exam Browser {AppInfo.ProgramBuildVersion}");
 						return Commands.EXIT_SUCCESS;
 					case CommandName.Run:
 						return await Commands.RunAsync(options);

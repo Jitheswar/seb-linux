@@ -8,6 +8,7 @@
  * Ported from Safe Exam Browser (seb-win-refactoring) for the Linux port.
  */
 
+using System;
 using System.Reflection;
 
 namespace SafeExamBrowser.Linux.Configuration.Contracts
@@ -49,5 +50,12 @@ namespace SafeExamBrowser.Linux.Configuration.Contracts
 				return separator < 0 ? version : version.Substring(0, separator);
 			}
 		}
+
+		/// <summary>
+		/// The version identifier exposed via the SEB JavaScript API (SafeExamBrowser.version),
+		/// in the upstream format appDisplayName_OS_versionString (e.g. "SEB_Windows_3.10.2").
+		/// </summary>
+		public static string VersionIdentity =>
+			(OperatingSystem.IsWindows() ? "SEB_Windows_" : "SEB_Linux_") + ProgramBuildVersion;
 	}
 }

@@ -36,10 +36,11 @@ namespace SafeExamBrowser.Linux.Cli
 
 	public static class CommandLine
 	{
-		public const string Usage = @"Exam Unlock (Safe Exam Browser)
+		public const string Usage = @"Safe Exam Browser
 
 Usage:
-  exam-unlock <command> <configuration> [options]
+  SafeExamBrowser <configuration> [options]
+  SafeExamBrowser <command> <configuration> [options]
 
 Commands:
   run     Start an exam session with the given configuration
@@ -102,10 +103,37 @@ Exit codes:
 					options.Command = CommandName.Check;
 					break;
 				default:
-					return (options, $"Unknown command '{args[0]}'!");
+					if (command.StartsWith("--", StringComparison.Ordinal))
+					{
+						return (options, $"Unknown option '{args[0]}'!");
+					}
+
+					// The first argument is not a command, but the configuration
+					// itself: start the exam directly, the way SEB is started with
+					// a configuration file (e.g. via a file association).
+					options.Command = CommandName.Run;
+					options.Configuration = args[0];
+					command = "run";
+					break;
 			}
 
-			for (var index = 1; index < args.Length; index++)
+			var error = ParseOptions(args, 1, options);
+
+			if (error != default)
+			{
+				return (options, error);
+			}
+
+			if (options.Configuration == default)
+			{
+				return (options, $"The '{command}' command requires a configuration file or URL!");
+			}
+
+			return (options, default);
+		}
+		private static string ParseOptions(string[] args, int startIndex, CommandLineOptions options)
+		{
+			for (var index = startIndex; index < args.Length; index++)
 			{
 				var argument = args[index];
 
@@ -114,7 +142,7 @@ Exit codes:
 					case "--password":
 						if (!TryTakeValue(args, ref index, out var password))
 						{
-							return (options, "Missing value for option '--password'!");
+							return "Missing value for option '--password'!";
 						}
 
 						options.Password = password;
@@ -122,7 +150,7 @@ Exit codes:
 					case "--url":
 						if (!TryTakeValue(args, ref index, out var url))
 						{
-							return (options, "Missing value for option '--url'!");
+							return "Missing value for option '--url'!";
 						}
 
 						options.Url = url;
@@ -130,7 +158,7 @@ Exit codes:
 					case "--chromium":
 						if (!TryTakeValue(args, ref index, out var chromium))
 						{
-							return (options, "Missing value for option '--chromium'!");
+							return "Missing value for option '--chromium'!";
 						}
 
 						options.Chromium = chromium;
@@ -144,12 +172,12 @@ Exit codes:
 					default:
 						if (argument.StartsWith("--", StringComparison.Ordinal))
 						{
-							return (options, $"Unknown option '{argument}'!");
+							return $"Unknown option '{argument}'!";
 						}
 
 						if (options.Configuration != default)
 						{
-							return (options, $"Unexpected argument '{argument}'!");
+							return $"Unexpected argument '{argument}'!";
 						}
 
 						options.Configuration = argument;
@@ -157,12 +185,7 @@ Exit codes:
 				}
 			}
 
-			if (options.Configuration == default)
-			{
-				return (options, $"The '{command}' command requires a configuration file or URL!");
-			}
-
-			return (options, default);
+			return default;
 		}
 
 		private static bool TryTakeValue(string[] args, ref int index, out string value)

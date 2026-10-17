@@ -114,11 +114,11 @@ namespace SafeExamBrowser.Linux.Tests
 			if (Environment.GetEnvironmentVariable("SEB_LINUX_BEK_SIGNATURE") == null)
 			{
 				Assert.Equal("safe-exam-browser-linux", AppInfo.CodeSignatureHash);
-				Assert.Equal("0.1.0", AppInfo.ProgramBuildVersion);
+				Assert.Equal("3.10.2", AppInfo.ProgramBuildVersion);
 			}
 
 			Assert.Equal(
-				"ab71fb4668276de3a3317083b5c63ca7e139d4722e68b50448143b029b95783a",
+				"10144b5c202cdf624009647eedbd5fb345fb1a3b64e03acbdc24c29056b107f7",
 				keyGenerator.CalculateBrowserExamKey("abc", salt));
 		}
 
@@ -129,7 +129,7 @@ namespace SafeExamBrowser.Linux.Tests
 			var keyGenerator = new KeyGenerator(logger);
 
 			Assert.Equal(
-				"6edacd1f2b2442e0c6507ab209538a80d3138dc4c885788ce96a71e62587a4a8",
+				"a1328ae511ca5f28b3acf5b9aded576ce745b4a8278406c309ea35b7dd963fab",
 				keyGenerator.CalculateBrowserExamKeyHash("abc", salt, "https://example.com/mod/quiz/view.php?id=42"));
 		}
 

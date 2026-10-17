@@ -17,7 +17,7 @@ namespace SafeExamBrowser.Linux.Tests.Browser
 		[Fact]
 		public void LoadApi_MustReplaceAllPlaceholders()
 		{
-			var js = sut.LoadApi("bek-hash", "ck-hash", "0.1.0");
+			var js = sut.LoadApi("bek-hash", "ck-hash", "SEB_Linux_0.1.0");
 
 			Assert.Contains("version: 'SEB_Linux_0.1.0'", js);
 			Assert.Contains("browserExamKey: 'bek-hash'", js);
